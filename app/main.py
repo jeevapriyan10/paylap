@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.config import settings
 from app.db import init_db
-from app.routers import arena, contracts, system, workers
+from app.routers import arena, contracts, stream, system, workers
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(system.router)
 app.include_router(contracts.router)
 app.include_router(workers.router)
 app.include_router(arena.router)
+app.include_router(stream.router)
 
 
 @app.get("/", include_in_schema=False)
