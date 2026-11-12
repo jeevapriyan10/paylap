@@ -33,3 +33,28 @@ def get_db():
 def init_db():
     from app import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Safe SQLite schema upgrade for Stage 2 columns
+    if "sqlite" in settings.PAYLAP_DB_URL:
+        with engine.connect() as conn:
+            try:
+                # Check milestones columns
+                res = conn.exec_driver_sql("PRAGMA table_info(milestones)").fetchall()
+                existing_cols = {row[1] for row in res}
+                if existing_cols:
+                    if "verifier_type" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE milestones ADD COLUMN verifier_type VARCHAR(32) DEFAULT 'python_code'")
+                    if "verifier_config" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE milestones ADD COLUMN verifier_config JSON")
+                    if "hidden_commitment" not in existing_cols:
+                        conn.exec_driver_sql("ALTER TABLE milestones ADD COLUMN hidden_commitment VARCHAR(64)")
+
+                # Check contracts columns
+                res_c = conn.exec_driver_sql("PRAGMA table_info(contracts)").fetchall()
+                existing_c_cols = {row[1] for row in res_c}
+                if existing_c_cols:
+                    if "hidden_commitment" not in existing_c_cols:
+                        conn.exec_driver_sql("ALTER TABLE contracts ADD COLUMN hidden_commitment VARCHAR(64)")
+                conn.commit()
+            except Exception:
+                pass

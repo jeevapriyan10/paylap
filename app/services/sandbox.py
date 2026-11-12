@@ -310,3 +310,87 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
             violations=[],
             notes=rlimits_note
         )
+
+
+def run_json_hidden_tests(data_json_str: str, tests: str) -> SandboxResult:
+    """
+    Execute buyer-trusted hidden pytest checks on submitted JSON data.
+    Provides the parsed document via a pytest fixture named 'data'.
+    """
+    start_time = time.perf_counter()
+    with tempfile.TemporaryDirectory(prefix="paylap_sb_json_") as temp_dir:
+        data_path = os.path.join(temp_dir, "data.json")
+        conftest_path = os.path.join(temp_dir, "conftest.py")
+        test_path = os.path.join(temp_dir, "test_data.py")
+
+        with open(data_path, "w", encoding="utf-8") as f:
+            f.write(data_json_str)
+
+        conftest_code = """import json
+import pytest
+
+@pytest.fixture
+def data():
+    with open("data.json", "r", encoding="utf-8") as f:
+        return json.load(f)
+"""
+        with open(conftest_path, "w", encoding="utf-8") as f:
+            f.write(conftest_code)
+
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write(tests)
+
+        env = _build_scrubbed_env(temp_dir)
+        preexec_fn, rlimits_note = _get_preexec_rlimits()
+
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "-q",
+            "--tb=short",
+            "test_data.py"
+        ]
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=temp_dir,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                preexec_fn=preexec_fn
+            )
+
+            stdout, stderr = proc.communicate(timeout=TIMEOUT_SECONDS)
+            exit_code = proc.returncode
+            timed_out = False
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(proc)
+            try:
+                stdout, stderr = proc.communicate(timeout=1.0)
+            except Exception:
+                stdout, stderr = "", ""
+            exit_code = -1
+            timed_out = True
+
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+
+        raw_output = (stdout or "") + (stderr or "")
+        if len(raw_output.encode("utf-8")) > MAX_OUTPUT_BYTES:
+            raw_output = raw_output[:MAX_OUTPUT_BYTES] + "\n[OUTPUT TRUNCATED TO 20 KB]"
+
+        passed = (exit_code == 0) and not timed_out
+
+        return SandboxResult(
+            passed=passed,
+            exit_code=exit_code,
+            duration_ms=round(duration_ms, 2),
+            output=raw_output,
+            timed_out=timed_out,
+            violations=[],
+            notes=rlimits_note
+        )

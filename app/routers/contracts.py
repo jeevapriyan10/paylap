@@ -35,6 +35,8 @@ def format_contract_response(contract: Contract) -> ContractResponse:
             amount_usd=cents_to_usd_str(m.amount_cents),
             spec=m.spec,
             public_tests=m.public_tests,
+            verifier_type=getattr(m, "verifier_type", "python_code") or "python_code",
+            verifier_config=getattr(m, "verifier_config", None),
             status=m.status,
             attempts=m.attempts,
             capture_id=m.capture_id,
@@ -76,6 +78,8 @@ def create_contract(
     In Demo mode, the contract is automatically funded.
     In Live mode, status is AWAITING_FUNDING with an approval URL for the buyer.
     """
+    import hashlib
+
     mode = settings.PAYLAP_MODE
     is_simulated = (mode == "demo")
     provider = get_paypal_provider(mode)
@@ -100,7 +104,20 @@ def create_contract(
     )
     db.add(contract)
 
+    hidden_commitments = []
     for idx, (m_spec, cents) in enumerate(zip(payload.milestones, milestone_cents), start=1):
+        hidden_parts = []
+        if m_spec.hidden_tests:
+            hidden_parts.append(m_spec.hidden_tests)
+        if m_spec.verifier_config and "hidden_tests" in m_spec.verifier_config:
+            hidden_parts.append(str(m_spec.verifier_config["hidden_tests"]))
+
+        h_commit = (
+            hashlib.sha256("".join(hidden_parts).encode("utf-8")).hexdigest()
+            if hidden_parts else None
+        )
+        hidden_commitments.append(h_commit)
+
         milestone = Milestone(
             id=generate_short_id(),
             contract_id=contract_id,
@@ -109,11 +126,20 @@ def create_contract(
             amount_cents=cents,
             spec=m_spec.spec,
             public_tests=m_spec.public_tests,
-            hidden_tests=m_spec.hidden_tests,  # Stored for future stages, never exposed via API
+            hidden_tests=m_spec.hidden_tests,  # Stored internally, never exposed via API
+            verifier_type=m_spec.verifier_type or "python_code",
+            verifier_config=m_spec.verifier_config,
+            hidden_commitment=h_commit,
             status="PENDING",
             attempts=0,
         )
         db.add(milestone)
+
+    overall_h_commit = (
+        hashlib.sha256("".join(c for c in hidden_commitments if c).encode("utf-8")).hexdigest()
+        if any(hidden_commitments) else None
+    )
+    contract.hidden_commitment = overall_h_commit
 
     db.commit()
     db.refresh(contract)
@@ -127,6 +153,8 @@ def create_contract(
             "total_cents": total_cents,
             "total_usd": cents_to_usd_str(total_cents),
             "milestone_count": len(payload.milestones),
+            "hidden_commitments": hidden_commitments,
+            "hidden_commitment": overall_h_commit,
             "mode": mode,
         },
         contract_id=contract.id,

@@ -40,6 +40,7 @@ class Contract(Base):
     approve_url = Column(String(1024), nullable=True)
     mode = Column(String(16), nullable=False, default="demo")
     max_attempts = Column(Integer, default=1, nullable=False)
+    hidden_commitment = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -58,6 +59,9 @@ class Milestone(Base):
     spec = Column(Text, nullable=False)
     public_tests = Column(Text, nullable=False)
     hidden_tests = Column(Text, nullable=True)  # Never returned by API responses
+    verifier_type = Column(String(32), nullable=False, default="python_code")
+    verifier_config = Column(JSON, nullable=True)
+    hidden_commitment = Column(String(64), nullable=True)
     status = Column(String(32), nullable=False, default="PENDING")
     attempts = Column(Integer, default=0, nullable=False)
     capture_id = Column(String(128), nullable=True)

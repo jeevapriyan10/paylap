@@ -7,6 +7,8 @@ from app.ledger import verify_chain
 from app.models import Event
 from app.schemas import HealthResponse
 
+from app.verifiers import list_available_verifiers
+
 router = APIRouter(prefix="/api", tags=["System"])
 
 
@@ -18,11 +20,13 @@ def health_check(db: Session = Depends(get_db)):
 
     return HealthResponse(
         status="ok",
-        version="0.1.0",
+        version="0.2.0",
         mode=settings.PAYLAP_MODE,
         payout_mode=settings.PAYLAP_PAYOUT_MODE,
+        arbiter_mode=settings.resolved_arbiter_mode,
         paypal_configured=paypal_configured,
         ledger_chain_valid=is_valid,
+        verifiers=list_available_verifiers(),
     )
 
 

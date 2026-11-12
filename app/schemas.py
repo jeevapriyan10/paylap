@@ -44,11 +44,12 @@ class MilestoneCreate(BaseModel):
     spec: str = Field(..., min_length=1, description="Task specification and requirements")
     public_tests: str = Field(..., min_length=1, description="Public test suite run against submitted solution")
     hidden_tests: Optional[str] = Field(None, description="Optional hidden test suite (never returned in responses)")
+    verifier_type: str = Field("python_code", description="Verifier plugin name: python_code, json_data, text_rules")
+    verifier_config: Optional[dict] = Field(None, description="Optional configuration for verifiers (schema, word counts, regex rules)")
 
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, v: str) -> str:
-        # Validates that it parses properly to cents
         cents = usd_str_to_cents(v)
         return cents_to_usd_str(cents)
 
@@ -86,6 +87,8 @@ class MilestoneResponse(BaseModel):
     amount_usd: str
     spec: str
     public_tests: str
+    verifier_type: str = "python_code"
+    verifier_config: Optional[dict] = None
     status: str
     attempts: int
     capture_id: Optional[str] = None
@@ -118,7 +121,7 @@ class ContractResponse(BaseModel):
 
 
 class MilestoneSubmit(BaseModel):
-    code: str = Field(..., min_length=1, description="Python solution code to verify")
+    code: str = Field(..., min_length=1, description="Solution code or text submission to verify")
 
 
 class MilestoneOutcome(BaseModel):
@@ -132,12 +135,16 @@ class MilestoneOutcome(BaseModel):
     payout_status: Optional[str] = None
     simulated: bool
     error: Optional[str] = None
+    gate_decided: Optional[str] = None
+    risk_flags: List[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     mode: str
     payout_mode: str
+    arbiter_mode: str
     paypal_configured: bool
     ledger_chain_valid: bool
+    verifiers: List[str] = Field(default_factory=list)
