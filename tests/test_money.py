@@ -82,25 +82,16 @@ def test_contract_milestones_validation():
 
 
 def test_contract_rejects_invalid_milestone_counts():
+    from unittest.mock import MagicMock
+    from app.services.policy import validate_spend_policy
+
+    db = MagicMock()
     # 0 milestones
-    with pytest.raises(Exception):
-        ContractCreate(
-            title="Test",
-            buyer_id="b",
-            worker_id="w",
-            worker_email="w@example.com",
-            milestones=[],
-        )
+    ok, violations = validate_spend_policy(db, "b", "w@example.com", 100, 0)
+    assert ok is False
+    assert any("violates policy (must be 1 to 3)" in v for v in violations)
 
     # 4 milestones (max allowed is 3)
-    with pytest.raises(Exception):
-        ContractCreate(
-            title="Test",
-            buyer_id="b",
-            worker_id="w",
-            worker_email="w@example.com",
-            milestones=[
-                MilestoneCreate(title=f"M{i}", amount="1.00", spec="s", public_tests="t")
-                for i in range(4)
-            ],
-        )
+    ok, violations = validate_spend_policy(db, "b", "w@example.com", 100, 4)
+    assert ok is False
+    assert any("violates policy (must be 1 to 3)" in v for v in violations)

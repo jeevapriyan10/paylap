@@ -30,6 +30,13 @@ def health_check(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/policy")
+def get_policy_endpoint() -> Dict[str, Any]:
+    """Get active spend policy limits and masked allowlist."""
+    from app.services.policy import get_policy_summary
+    return get_policy_summary()
+
+
 @router.get("/ledger/verify")
 def verify_ledger_endpoint(db: Session = Depends(get_db)) -> Dict[str, Any]:
     """Verify cryptographic integrity of the entire event ledger chain."""

@@ -59,7 +59,7 @@ class ContractCreate(BaseModel):
     buyer_id: str = Field(..., min_length=1, max_length=128)
     worker_id: str = Field(..., min_length=1, max_length=128)
     worker_email: str = Field(..., min_length=3, max_length=255)
-    milestones: List[MilestoneCreate] = Field(..., min_length=1, max_length=3)
+    milestones: List[MilestoneCreate] = Field(default_factory=list)
     max_attempts: int = Field(1, ge=1, le=10)
 
     @field_validator("worker_email")
@@ -69,12 +69,6 @@ class ContractCreate(BaseModel):
         if "@" not in v_clean or "." not in v_clean.split("@")[-1]:
             raise ValueError(f"Invalid email address '{v}'")
         return v_clean
-
-    @model_validator(mode="after")
-    def validate_contract_milestones(self) -> "ContractCreate":
-        if not (1 <= len(self.milestones) <= 3):
-            raise ValueError("A contract must have between 1 and 3 milestones.")
-        return self
 
 
 class MilestoneResponse(BaseModel):

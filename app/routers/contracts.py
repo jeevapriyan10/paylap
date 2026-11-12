@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
@@ -15,6 +15,7 @@ from app.schemas import (
     cents_to_usd_str,
     usd_str_to_cents,
 )
+from app.services.policy import mask_email, validate_spend_policy
 from app.services.settlement import get_paypal_provider, settle_milestone
 from app.state import (
     ContractStatus,
@@ -89,6 +90,58 @@ def create_contract(
     # Calculate total cents exactly from milestone amounts
     milestone_cents = [usd_str_to_cents(m.amount) for m in payload.milestones]
     total_cents = sum(milestone_cents)
+
+    # Pre-transaction spend policy check (before PayPal is touched)
+    allowed, violations = validate_spend_policy(
+        db=db,
+        buyer_id=payload.buyer_id,
+        worker_email=payload.worker_email,
+        total_cents=total_cents,
+        milestone_count=len(payload.milestones),
+    )
+    if not allowed:
+        contract = Contract(
+            id=contract_id,
+            title=payload.title,
+            buyer_id=payload.buyer_id,
+            worker_id=payload.worker_id,
+            worker_email=payload.worker_email,
+            total_cents=total_cents,
+            currency="USD",
+            status=ContractStatus.BLOCKED.value,
+            mode=mode,
+            max_attempts=payload.max_attempts,
+        )
+        db.add(contract)
+        db.commit()
+        db.refresh(contract)
+
+        append_event(
+            db,
+            event_type="POLICY_BLOCKED",
+            payload={
+                "contract_id": contract.id,
+                "buyer_id": contract.buyer_id,
+                "worker_email": mask_email(contract.worker_email),
+                "total_cents": total_cents,
+                "violations": violations,
+            },
+            contract_id=contract.id,
+            simulated=is_simulated,
+        )
+
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "Policy violation",
+                "violations": violations,
+                "contract_id": contract.id,
+                "detail": {
+                    "error": "Policy violation",
+                    "violations": violations,
+                },
+            },
+        )
 
     contract = Contract(
         id=contract_id,
