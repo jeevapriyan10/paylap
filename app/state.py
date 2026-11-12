@@ -9,6 +9,7 @@ class ContractStatus(str, Enum):
     COMPLETED = "COMPLETED"
     VOIDED = "VOIDED"
     CANCELLED = "CANCELLED"
+    BLOCKED = "BLOCKED"
     ERROR = "ERROR"
 
 
@@ -16,6 +17,7 @@ class MilestoneStatus(str, Enum):
     PENDING = "PENDING"
     SUBMITTED = "SUBMITTED"
     VERIFYING = "VERIFYING"
+    VERIFIED_PENDING_SETTLEMENT = "VERIFIED_PENDING_SETTLEMENT"
     PAID = "PAID"
     REJECTED = "REJECTED"
 
@@ -26,29 +28,40 @@ class InvalidStateTransitionError(Exception):
 
 
 # Legal Contract transitions:
-# CREATED -> AWAITING_FUNDING -> FUNDED -> COMPLETED
-# In demo mode, CREATED can also transition directly to FUNDED
-# FUNDED -> VOIDED (attempts exhausted or buyer cancellation)
-# AWAITING_FUNDING -> CANCELLED (buyer abandoned/cancelled at PayPal)
-# Any state -> ERROR (must have error event/reason)
 CONTRACT_TRANSITIONS = {
-    ContractStatus.CREATED: {ContractStatus.AWAITING_FUNDING, ContractStatus.FUNDED, ContractStatus.ERROR},
-    ContractStatus.AWAITING_FUNDING: {ContractStatus.FUNDED, ContractStatus.CANCELLED, ContractStatus.ERROR},
-    ContractStatus.FUNDED: {ContractStatus.COMPLETED, ContractStatus.VOIDED, ContractStatus.ERROR},
+    ContractStatus.CREATED: {
+        ContractStatus.AWAITING_FUNDING,
+        ContractStatus.FUNDED,
+        ContractStatus.BLOCKED,
+        ContractStatus.ERROR
+    },
+    ContractStatus.AWAITING_FUNDING: {
+        ContractStatus.FUNDED,
+        ContractStatus.CANCELLED,
+        ContractStatus.ERROR
+    },
+    ContractStatus.FUNDED: {
+        ContractStatus.COMPLETED,
+        ContractStatus.VOIDED,
+        ContractStatus.ERROR
+    },
     ContractStatus.COMPLETED: {ContractStatus.ERROR},
     ContractStatus.VOIDED: {ContractStatus.ERROR},
     ContractStatus.CANCELLED: {ContractStatus.ERROR},
+    ContractStatus.BLOCKED: {ContractStatus.ERROR},
     ContractStatus.ERROR: set(),
 }
 
 # Legal Milestone transitions:
-# PENDING -> SUBMITTED -> VERIFYING -> PAID
-# VERIFYING -> REJECTED
-# REJECTED -> PENDING (when retried) or back to SUBMITTED if re-submitted
 MILESTONE_TRANSITIONS = {
     MilestoneStatus.PENDING: {MilestoneStatus.SUBMITTED},
     MilestoneStatus.SUBMITTED: {MilestoneStatus.VERIFYING},
-    MilestoneStatus.VERIFYING: {MilestoneStatus.PAID, MilestoneStatus.REJECTED},
+    MilestoneStatus.VERIFYING: {
+        MilestoneStatus.PAID,
+        MilestoneStatus.VERIFIED_PENDING_SETTLEMENT,
+        MilestoneStatus.REJECTED
+    },
+    MilestoneStatus.VERIFIED_PENDING_SETTLEMENT: {MilestoneStatus.PAID},
     MilestoneStatus.REJECTED: {MilestoneStatus.PENDING, MilestoneStatus.SUBMITTED},
     MilestoneStatus.PAID: set(),
 }

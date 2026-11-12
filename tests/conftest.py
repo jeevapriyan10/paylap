@@ -2,8 +2,17 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from app.config import settings
 from app.db import Base
 from app.models import Contract, Milestone, Event
+
+
+@pytest.fixture(autouse=True)
+def set_default_test_settings():
+    orig_arbiter = settings.PAYLAP_ARBITER_MODE
+    settings.PAYLAP_ARBITER_MODE = "mock"
+    yield
+    settings.PAYLAP_ARBITER_MODE = orig_arbiter
 
 
 @pytest.fixture
