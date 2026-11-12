@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     PAYLAP_ARBITER_FAIL: Literal["closed"] = "closed"
     PAYLAP_CAPTURE_STRATEGY: Literal["partial", "batch_at_end"] = "partial"
     PAYLAP_RECEIPT_SECRET: str = ""
-    PAYLAP_POLICY_MAX_TASK_USD: int = 50
-    PAYLAP_POLICY_DAILY_USD: int = 200
+    PAYLAP_POLICY_MAX_TASK_USD: int = 25
+    PAYLAP_POLICY_DAILY_USD: int = 100
     PAYLAP_POLICY_ALLOWLIST: str = ""
     ARENA_WORKER_SOURCE: Literal["auto", "gemini", "canned"] = "auto"
 

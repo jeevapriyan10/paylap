@@ -10,9 +10,12 @@ from app.models import Contract, Milestone, Event
 @pytest.fixture(autouse=True)
 def set_default_test_settings():
     orig_arbiter = settings.PAYLAP_ARBITER_MODE
+    orig_worker_source = settings.ARENA_WORKER_SOURCE
     settings.PAYLAP_ARBITER_MODE = "mock"
+    settings.ARENA_WORKER_SOURCE = "canned"
     yield
     settings.PAYLAP_ARBITER_MODE = orig_arbiter
+    settings.ARENA_WORKER_SOURCE = orig_worker_source
 
 
 @pytest.fixture
