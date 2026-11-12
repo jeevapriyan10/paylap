@@ -557,3 +557,18 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(contract)
     return format_contract_response(contract)
+
+
+@router.get("/{contract_id}/receipt")
+def get_contract_receipt(
+    contract_id: str,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """Generate and return a signed, tamper-evident cryptographic receipt for the contract."""
+    from app.services.receipts import generate_receipt
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
+
+    return generate_receipt(contract, db)

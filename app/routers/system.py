@@ -75,3 +75,14 @@ def list_events(
         }
         for e in events
     ]
+
+
+@router.post("/receipts/verify")
+def verify_receipt_endpoint(
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """Cryptographically verify a PayLap receipt."""
+    from app.services.receipts import verify_receipt
+    return verify_receipt(payload, db=db)
+
