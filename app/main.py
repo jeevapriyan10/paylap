@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.config import settings
 from app.db import init_db
-from app.routers import contracts, system
+from app.routers import contracts, system, workers
 
 
 @asynccontextmanager
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="PayLap API",
     description="Escrow and milestone-settlement layer for AI agents ('Pay on proof, not on promise').",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -41,6 +41,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(system.router)
 app.include_router(contracts.router)
+app.include_router(workers.router)
 
 
 @app.get("/", include_in_schema=False)
