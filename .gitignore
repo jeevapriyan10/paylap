@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+smoke_report.json
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+dist/
+build/
+*.egg-info/
