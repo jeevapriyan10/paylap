@@ -102,10 +102,32 @@ python scripts/demo_cli.py
 ### 3. Running in Live Mode (PayPal Sandbox)
 1. Copy `.env.example` to `.env` and fill in your PayPal Sandbox Client ID, Secret, and worker email.
 2. Set `PAYLAP_MODE=live`.
-3. Start the server and run live verification:
+3. Start the server:
 ```bash
-python scripts/smoke_paypal.py --scenario settle
+uvicorn app.main:app --reload --port 8000
 ```
+4. Run live PayPal verification:
+```bash
+# Settle scenario: Order -> Authorize -> Partial Captures -> Payouts -> Void remaining
+python scripts/smoke_paypal.py --scenario settle
+
+# Void scenario: Order -> Authorize -> Full Void (no captures)
+python scripts/smoke_paypal.py --scenario void
+```
+
+## REST API Endpoints
+
+- `GET /`: Minimal static status page.
+- `GET /api/health`: Health status, runtime modes, and ledger verification.
+- `POST /api/contracts`: Create a contract with 1-3 milestones.
+- `GET /api/contracts`: List all contracts.
+- `GET /api/contracts/{id}`: Detailed contract status, milestones, and audit events.
+- `GET /api/contracts/{id}/funding/return`: PayPal buyer-approval return callback.
+- `GET /api/contracts/{id}/funding/cancel`: PayPal buyer cancellation callback.
+- `POST /api/contracts/{id}/milestones/{idx}/submit`: Submit solution code for verification and settlement.
+- `POST /api/contracts/{id}/cancel`: Buyer cancellation and escrow hold voiding.
+- `GET /api/events`: Append-only event ledger history.
+- `GET /api/ledger/verify`: Cryptographic verification of SHA-256 event hash chain.
 
 ## Running Tests
 
