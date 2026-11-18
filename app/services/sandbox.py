@@ -165,7 +165,9 @@ def _build_scrubbed_env(temp_dir: str) -> dict:
     # Explicitly ensure no sensitive words leak into child env
     for k in list(scrubbed.keys()):
         k_upper = k.upper()
-        if any(secret_term in k_upper for secret_term in ("KEY", "SECRET", "TOKEN", "PAYPAL", "GEMINI", "AUTH", "PASS")):
+        if any(
+            secret_term in k_upper for secret_term in ("KEY", "SECRET", "TOKEN", "PAYPAL", "GEMINI", "AUTH", "PASS")
+        ):
             scrubbed.pop(k, None)
 
     scrubbed["PYTHONPATH"] = temp_dir
@@ -202,11 +204,7 @@ def _kill_process_tree(proc: subprocess.Popen):
     """Forcefully terminate a process and its child processes."""
     try:
         if sys.platform.startswith("win"):
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                capture_output=True,
-                check=False
-            )
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
         else:
             proc.kill()
     except Exception:
@@ -231,7 +229,7 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
             output=syntax_err,
             timed_out=False,
             violations=[],
-            notes="Rejected by AST parser due to syntax error."
+            notes="Rejected by AST parser due to syntax error.",
         )
 
     if not is_clean:
@@ -239,10 +237,11 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
             passed=False,
             exit_code=1,
             duration_ms=0.0,
-            output=f"Security Policy Violation: Code contained forbidden constructs:\n" + "\n".join(f"- {v}" for v in violations),
+            output="Security Policy Violation: Code contained forbidden constructs:\n"
+            + "\n".join(f"- {v}" for v in violations),
             timed_out=False,
             violations=violations,
-            notes="Execution blocked by static AST security screener."
+            notes="Execution blocked by static AST security screener.",
         )
 
     # Step 2: Prepare temporary sandbox directory
@@ -260,16 +259,7 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
         env = _build_scrubbed_env(temp_dir)
         preexec_fn, rlimits_note = _get_preexec_rlimits()
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-p",
-            "no:cacheprovider",
-            "-q",
-            "--tb=short",
-            "test_solution.py"
-        ]
+        cmd = [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "--tb=short", "test_solution.py"]
 
         try:
             proc = subprocess.Popen(
@@ -279,7 +269,7 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                preexec_fn=preexec_fn
+                preexec_fn=preexec_fn,
             )
 
             stdout, stderr = proc.communicate(timeout=TIMEOUT_SECONDS)
@@ -309,7 +299,7 @@ def run_python_tests(code: str, tests: str) -> SandboxResult:
             output=raw_output,
             timed_out=timed_out,
             violations=[],
-            notes=rlimits_note
+            notes=rlimits_note,
         )
 
 
@@ -344,16 +334,7 @@ def data():
         env = _build_scrubbed_env(temp_dir)
         preexec_fn, rlimits_note = _get_preexec_rlimits()
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-p",
-            "no:cacheprovider",
-            "-q",
-            "--tb=short",
-            "test_data.py"
-        ]
+        cmd = [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "--tb=short", "test_data.py"]
 
         try:
             proc = subprocess.Popen(
@@ -363,7 +344,7 @@ def data():
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                preexec_fn=preexec_fn
+                preexec_fn=preexec_fn,
             )
 
             stdout, stderr = proc.communicate(timeout=TIMEOUT_SECONDS)
@@ -393,5 +374,5 @@ def data():
             output=raw_output,
             timed_out=timed_out,
             violations=[],
-            notes=rlimits_note
+            notes=rlimits_note,
         )

@@ -1,9 +1,6 @@
 import pytest
+
 from app.verifiers import get_verifier, list_available_verifiers
-from app.verifiers.base import VerificationResult
-from fastapi.testclient import TestClient
-from app.db import get_db
-from app.main import app
 
 
 class DummyMilestone:
@@ -154,57 +151,47 @@ def test_text_rules_verifier():
     assert res4.passed is True
 
 
-def test_hidden_test_sentinel_leak_scan(db_session):
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
+def test_hidden_test_sentinel_leak_scan(client):
+    sentinel = "CONFIDENTIAL_SENTINEL_SECRET_TOKEN_42"
+    payload = {
+        "title": "Confidential Contract",
+        "worker_id": "w-secret",
+        "worker_email": "w@example.com",
+        "environment": "simulated",
+        "milestones": [
+            {
+                "title": "M1",
+                "amount": "5.00",
+                "spec": "spec",
+                "public_tests": "def test_ok(): pass",
+                "hidden_tests": f"def test_secret(): assert 1 == 1, '{sentinel}'",
+            }
+        ],
+    }
 
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as client:
-        sentinel = "CONFIDENTIAL_SENTINEL_SECRET_TOKEN_42"
-        payload = {
-            "title": "Confidential Contract",
-            "buyer_id": "b-secret",
-            "worker_id": "w-secret",
-            "worker_email": "w@example.com",
-            "milestones": [
-                {
-                    "title": "M1",
-                    "amount": "5.00",
-                    "spec": "spec",
-                    "public_tests": "def test_ok(): pass",
-                    "hidden_tests": f"def test_secret(): assert 1 == 1, '{sentinel}'",
-                }
-            ],
-        }
+    # Contract creation
+    create_res = client.post("/v1/contracts", json=payload)
+    assert create_res.status_code == 201
+    assert sentinel not in create_res.text
+    contract_id = create_res.json()["id"]
 
-        # Contract creation
-        create_res = client.post("/api/contracts", json=payload)
-        assert create_res.status_code == 201
-        assert sentinel not in create_res.text
-        contract_id = create_res.json()["id"]
+    # Detail endpoint
+    detail_res = client.get(f"/v1/contracts/{contract_id}")
+    assert detail_res.status_code == 200
+    assert sentinel not in detail_res.text
 
-        # Detail endpoint
-        detail_res = client.get(f"/api/contracts/{contract_id}")
-        assert detail_res.status_code == 200
-        assert sentinel not in detail_res.text
+    # List endpoint
+    list_res = client.get("/v1/contracts")
+    assert list_res.status_code == 200
+    assert sentinel not in list_res.text
 
-        # List endpoint
-        list_res = client.get("/api/contracts")
-        assert list_res.status_code == 200
-        assert sentinel not in list_res.text
+    # Events endpoint
+    events_res = client.get("/v1/system/events")
+    assert events_res.status_code == 200
+    assert sentinel not in events_res.text
 
-        # Events endpoint
-        events_res = client.get("/api/events")
-        assert events_res.status_code == 200
-        assert sentinel not in events_res.text
-
-        # Health endpoint
-        health_res = client.get("/api/health")
-        assert health_res.status_code == 200
-        assert sentinel not in health_res.text
-        assert "python_code" in health_res.json()["verifiers"]
-
-    app.dependency_overrides.clear()
+    # Health endpoint
+    health_res = client.get("/v1/system/health")
+    assert health_res.status_code == 200
+    assert sentinel not in health_res.text
+    assert "python_code" in health_res.json()["verifiers"]

@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -24,7 +25,9 @@ def usd_str_to_cents(amount_str: str) -> int:
 
     amount_clean = amount_str.strip()
     if not re.match(r"^\d+(\.\d{1,2})?$", amount_clean):
-        raise ValueError(f"Invalid USD amount format '{amount_str}'. Must be a positive decimal string with up to 2 decimal places.")
+        raise ValueError(
+            f"Invalid USD amount format '{amount_str}'. Must be a positive decimal string with up to 2 decimal places."
+        )
 
     try:
         dec = Decimal(amount_clean)
@@ -59,7 +62,7 @@ class MilestoneCreate(BaseModel):
             cents = usd_str_to_cents(self.amount)
         else:
             raise ValueError("Milestone must have either 'amount_minor', 'amount_cents', or 'amount' (USD string)")
-        
+
         self.amount_minor = cents
         self.amount_cents = cents
         self.amount = cents_to_usd_str(cents)

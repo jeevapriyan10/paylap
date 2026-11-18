@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.ids import generate_id
 from app.ledger import append_event
 from app.models import Contract, Organization, ReconciliationRun
@@ -34,11 +36,13 @@ def run_reconciliation(
         select(Contract).where(
             Contract.org_id == org_id,
             Contract.environment == environment,
-            Contract.status.in_([
-                ContractStatus.AWAITING_FUNDING.value,
-                ContractStatus.FUNDED.value,
-                ContractStatus.COMPLETED.value,
-            ]),
+            Contract.status.in_(
+                [
+                    ContractStatus.AWAITING_FUNDING.value,
+                    ContractStatus.FUNDED.value,
+                    ContractStatus.COMPLETED.value,
+                ]
+            ),
         )
     ).all()
 
@@ -56,9 +60,7 @@ def run_reconciliation(
                 pp_order_status = pp_order.get("status")
 
                 if ctr.status == ContractStatus.FUNDED.value and pp_order_status in ("VOIDED", "EXPIRED"):
-                    discrepancy_reasons.append(
-                        f"Local contract is FUNDED but PayPal Order is {pp_order_status}"
-                    )
+                    discrepancy_reasons.append(f"Local contract is FUNDED but PayPal Order is {pp_order_status}")
             except Exception as exc:
                 logger.warning(f"Failed to query PayPal order for contract {ctr.id}: {exc}")
 
@@ -68,9 +70,7 @@ def run_reconciliation(
                 pp_auth_status = pp_auth.get("status")
 
                 if ctr.status == ContractStatus.FUNDED.value and pp_auth_status in ("VOIDED", "DENIED", "EXPIRED"):
-                    discrepancy_reasons.append(
-                        f"Local contract is FUNDED but PayPal Authorization is {pp_auth_status}"
-                    )
+                    discrepancy_reasons.append(f"Local contract is FUNDED but PayPal Authorization is {pp_auth_status}")
                 elif ctr.status == ContractStatus.COMPLETED.value and pp_auth_status == "CREATED":
                     discrepancy_reasons.append(
                         "Local contract is COMPLETED but PayPal Authorization is still CREATED/open"

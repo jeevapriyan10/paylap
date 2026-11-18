@@ -1,8 +1,9 @@
 import re
 import time
 from typing import Any
+
 from app.services.runner import get_runner
-from app.verifiers.base import VerifierBase, VerificationResult
+from app.verifiers.base import VerificationResult, VerifierBase
 
 
 class PythonCodeVerifier(VerifierBase):
@@ -29,7 +30,7 @@ class PythonCodeVerifier(VerifierBase):
                 checks=[{"name": "public_tests", "passed": False}],
                 violations=public_res.violations,
                 duration_ms=round(duration_ms, 2),
-                gate_type="deterministic"
+                gate_type="deterministic",
             )
 
         checks = [{"name": "public_tests", "passed": True}]
@@ -58,7 +59,7 @@ class PythonCodeVerifier(VerifierBase):
                     checks=checks,
                     violations=hidden_res.violations,
                     duration_ms=round(duration_ms, 2),
-                    gate_type="deterministic"
+                    gate_type="deterministic",
                 )
             else:
                 checks.append({"name": "hidden_tests", "passed": True})
@@ -71,5 +72,5 @@ class PythonCodeVerifier(VerifierBase):
             checks=checks,
             violations=[],
             duration_ms=round(duration_ms, 2),
-            gate_type="deterministic"
+            gate_type="deterministic",
         )

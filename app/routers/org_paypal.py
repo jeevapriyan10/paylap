@@ -1,13 +1,14 @@
 from datetime import datetime, timezone
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+
 import httpx
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.db import get_db
 from app.ids import generate_id
-from app.models import Organization, OrgPayPalCredential
+from app.models import OrgPayPalCredential
 from app.routers.auth import Principal, get_current_principal
 from app.services.crypto import decrypt_credential, encrypt_credential
 from app.services.paypal_factory import PAYPAL_LIVE_BASE_URL, PAYPAL_SANDBOX_BASE_URL

@@ -1,21 +1,29 @@
 import hashlib
 import hmac
 import secrets
-import time
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from app.config import settings
 
 # Argon2id password hasher instance
 ph = PasswordHasher()
 
 # Top common passwords to reject
 COMMON_PASSWORDS: Set[str] = {
-    "password1234", "123456789012", "qwertyuiop12", "administrator",
-    "password12345", "welcome123456", "changeme1234", "letmein12345",
-    "iloveyou1234", "admin1234567", "password2024", "password2025", "password2026",
+    "password1234",
+    "123456789012",
+    "qwertyuiop12",
+    "administrator",
+    "password12345",
+    "welcome123456",
+    "changeme1234",
+    "letmein12345",
+    "iloveyou1234",
+    "admin1234567",
+    "password2024",
+    "password2025",
+    "password2026",
 }
 
 # Dummy hash used to equalize response timing when email is not found
@@ -154,7 +162,7 @@ def generate_api_key(env_class: str = "test") -> Tuple[str, str, str, str, str]:
     """
     prefix = f"pl_{env_class}"
     lookup_id = secrets.token_hex(8)  # 16 chars
-    secret = secrets.token_hex(16)    # 32 chars
+    secret = secrets.token_hex(16)  # 32 chars
     full_key = f"{prefix}_{lookup_id}_{secret}"
     secret_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     last4 = secret[-4:]

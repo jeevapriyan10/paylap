@@ -1,19 +1,18 @@
 import base64
-import os
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.config import settings
 from app.ids import generate_id
-from app.models import Organization, OrgPayPalCredential
+from app.models import Organization
 from app.services.crypto import (
     DecryptionError,
     decrypt_credential,
     encrypt_credential,
     reencrypt_credential,
-    rotate_all_credentials_master_key,
 )
-from app.services.paypal_base import PayPalError
 from app.services.paypal_factory import (
     LiveEnvironmentDisabledError,
     get_provider,

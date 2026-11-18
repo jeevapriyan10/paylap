@@ -1,22 +1,27 @@
 import hashlib
 import json
 from typing import Any, Dict, Optional, Tuple
+
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
 from app.db import set_tenant_org
 from app.ids import generate_id
 from app.models import Contract, Event, OrgAuditLog, utc_now
+
+__all__ = [
+    "set_tenant_org",
+    "compute_event_hash",
+    "append_event",
+    "verify_chain",
+    "GENESIS_PREV_HASH",
+]
 
 GENESIS_PREV_HASH = "0" * 64
 
 
 def compute_event_hash(
-    prev_hash: str,
-    event_type: str,
-    payload: dict,
-    contract_id: Optional[str],
-    simulated: bool,
-    created_at_iso: str
+    prev_hash: str, event_type: str, payload: dict, contract_id: Optional[str], simulated: bool, created_at_iso: str
 ) -> str:
     """Compute deterministic SHA-256 hash using sorted canonical JSON representation."""
     canonical_dict = {
@@ -37,7 +42,7 @@ def append_event(
     payload: dict,
     contract_id: Optional[str] = None,
     org_id: Optional[str] = None,
-    simulated: bool = False
+    simulated: bool = False,
 ) -> Event:
     """
     Append a new event to the hash-chained, tamper-evident ledger.
@@ -45,10 +50,7 @@ def append_event(
     """
     if contract_id:
         # Acquire transaction-scoped advisory lock on hashtext(contract_id)
-        db.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:cid))"),
-            {"cid": contract_id}
-        )
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:cid))"), {"cid": contract_id})
 
     # Resolve org_id from contract if not provided
     resolved_org_id = org_id
@@ -66,9 +68,7 @@ def append_event(
             select(Event).where(Event.contract_id == contract_id).order_by(Event.seq.desc()).limit(1)
         )
     else:
-        last_event = db.scalar(
-            select(Event).order_by(Event.seq.desc()).limit(1)
-        )
+        last_event = db.scalar(select(Event).order_by(Event.seq.desc()).limit(1))
 
     if last_event is None:
         seq = 1
@@ -94,7 +94,7 @@ def append_event(
         payload=event_payload,
         contract_id=contract_id,
         simulated=simulated,
-        created_at_iso=created_at_iso
+        created_at_iso=created_at_iso,
     )
 
     event = Event(
@@ -145,7 +145,7 @@ def verify_chain(db: Session, contract_id: Optional[str] = None) -> Tuple[bool, 
             payload=evt.payload,
             contract_id=evt.contract_id,
             simulated=evt.simulated,
-            created_at_iso=evt.created_at.isoformat()
+            created_at_iso=evt.created_at.isoformat(),
         )
         if calc_hash != evt.event_hash:
             return False, f"Corrupted hash at seq {evt.seq}", evt.seq
@@ -159,6 +159,7 @@ def verify_chain(db: Session, contract_id: Optional[str] = None) -> Tuple[bool, 
 # PER-ORGANIZATION AUDIT LOG HASH CHAIN
 # ==============================================================================
 
+
 def compute_org_audit_hash(
     prev_hash: str,
     seq: int,
@@ -166,7 +167,7 @@ def compute_org_audit_hash(
     actor_id: Optional[str],
     details: Optional[Dict[str, Any]],
     org_id: str,
-    created_at_iso: str
+    created_at_iso: str,
 ) -> str:
     """Compute deterministic SHA-256 hash for org audit log entry."""
     canonical_dict = {
@@ -194,10 +195,7 @@ def append_org_audit_log(
     Serializes concurrent appends on the same organization via transaction advisory lock.
     """
     # Advisory lock on the org's audit log
-    db.execute(
-        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
-        {"lock_key": f"org_audit:{org_id}"}
-    )
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"), {"lock_key": f"org_audit:{org_id}"})
 
     last_entry = db.scalar(
         select(OrgAuditLog).where(OrgAuditLog.org_id == org_id).order_by(OrgAuditLog.seq.desc()).limit(1)
@@ -244,9 +242,7 @@ def verify_org_audit_chain(db: Session, org_id: str) -> Tuple[bool, Optional[str
     Verify the cryptographic integrity of an organization's audit log hash chain.
     Returns (is_valid, error_message, broken_seq).
     """
-    entries = db.scalars(
-        select(OrgAuditLog).where(OrgAuditLog.org_id == org_id).order_by(OrgAuditLog.seq.asc())
-    ).all()
+    entries = db.scalars(select(OrgAuditLog).where(OrgAuditLog.org_id == org_id).order_by(OrgAuditLog.seq.asc())).all()
 
     if not entries:
         return True, None, None

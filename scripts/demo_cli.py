@@ -14,7 +14,7 @@ Usage:
 
 import argparse
 import sys
-import time
+
 import httpx
 
 
@@ -139,13 +139,15 @@ def apply_jitter(backoff: float, jitter_ratio: float = 0.1) -> float:
     # Verify final Contract A status
     final_a = client.get(f"/api/contracts/{contract_a_id}").json()["contract"]
     print(f"Final Contract State : \033[92m{final_a['status']}\033[0m")
-    results_table.append({
-        "contract_id": contract_a_id,
-        "title": final_a["title"],
-        "total_usd": f"${final_a['total_usd']}",
-        "milestones": f"{sum(1 for m in final_a['milestones'] if m['status'] == 'PAID')}/{len(final_a['milestones'])} PAID",
-        "status": final_a["status"]
-    })
+    results_table.append(
+        {
+            "contract_id": contract_a_id,
+            "title": final_a["title"],
+            "total_usd": f"${final_a['total_usd']}",
+            "milestones": f"{sum(1 for m in final_a['milestones'] if m['status'] == 'PAID')}/{len(final_a['milestones'])} PAID",
+            "status": final_a["status"],
+        }
+    )
 
     # =========================================================================
     # CONTRACT B: Failure Scenario (1 Milestone -> Buggy -> REJECTED -> VOIDED)
@@ -197,13 +199,15 @@ def sort_ints(arr):
 
     final_b = client.get(f"/api/contracts/{contract_b_id}").json()["contract"]
     print(f"Final Contract State : \033[93m{final_b['status']}\033[0m (Attempts exhausted -> Hold voided)")
-    results_table.append({
-        "contract_id": contract_b_id,
-        "title": final_b["title"],
-        "total_usd": f"${final_b['total_usd']}",
-        "milestones": f"{sum(1 for m in final_b['milestones'] if m['status'] == 'PAID')}/{len(final_b['milestones'])} PAID",
-        "status": final_b["status"]
-    })
+    results_table.append(
+        {
+            "contract_id": contract_b_id,
+            "title": final_b["title"],
+            "total_usd": f"${final_b['total_usd']}",
+            "milestones": f"{sum(1 for m in final_b['milestones'] if m['status'] == 'PAID')}/{len(final_b['milestones'])} PAID",
+            "status": final_b["status"],
+        }
+    )
 
     # =========================================================================
     # SUMMARY TABLE & CRYPTOGRAPHIC LEDGER VERIFICATION
@@ -213,13 +217,9 @@ def sort_ints(arr):
     print(header_fmt.format("Contract ID", "Title", "Amount", "Milestones", "Status"))
     print("-" * 88)
     for row in results_table:
-        print(header_fmt.format(
-            row["contract_id"],
-            row["title"][:30],
-            row["total_usd"],
-            row["milestones"],
-            row["status"]
-        ))
+        print(
+            header_fmt.format(row["contract_id"], row["title"][:30], row["total_usd"], row["milestones"], row["status"])
+        )
 
     print_banner("Cryptographic Ledger Integrity Verification")
     ledger_res = client.get("/api/ledger/verify").json()
@@ -227,7 +227,9 @@ def sort_ints(arr):
         print("\033[92m[PASS] Cryptographic Event Hash Chain is 100% INTACT.\033[0m")
         print("All events are sequentially chained and un-tampered.")
     else:
-        print(f"\033[91m[FAIL] Ledger broken link detected at seq {ledger_res.get('broken_seq')}: {ledger_res.get('error')}\033[0m")
+        print(
+            f"\033[91m[FAIL] Ledger broken link detected at seq {ledger_res.get('broken_seq')}: {ledger_res.get('error')}\033[0m"
+        )
 
     print("\n" + "=" * 70 + "\n")
 

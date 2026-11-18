@@ -1,5 +1,7 @@
 from typing import Any, Dict, List
+
 from sqlalchemy.orm import Session
+
 from app.models import Contract, Event, Milestone
 from app.schemas import cents_to_usd_str
 from app.state import MilestoneStatus
@@ -40,22 +42,14 @@ def compute_worker_reputation(db: Session, worker_id: str) -> Dict[str, Any]:
         }
 
     # Query milestones
-    milestones = (
-        db.query(Milestone)
-        .filter(Milestone.contract_id.in_(contract_ids))
-        .all()
-    )
+    milestones = db.query(Milestone).filter(Milestone.contract_id.in_(contract_ids)).all()
 
     attempted_milestones = sum(1 for m in milestones if m.attempts > 0 or m.status != MilestoneStatus.PENDING.value)
     paid_milestones = sum(1 for m in milestones if m.status == MilestoneStatus.PAID.value)
     total_earned_cents = sum(m.amount_cents for m in milestones if m.status == MilestoneStatus.PAID.value)
 
     # Query penalty events
-    events = (
-        db.query(Event)
-        .filter(Event.contract_id.in_(contract_ids))
-        .all()
-    )
+    events = db.query(Event).filter(Event.contract_id.in_(contract_ids)).all()
 
     injection_attempts = sum(1 for e in events if e.type == "INJECTION_ATTEMPT_DETECTED")
     ast_policy_violations = sum(1 for e in events if e.type == "AST_VIOLATION")

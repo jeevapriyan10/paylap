@@ -1,16 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-import time
 from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.auth import Principal, require_principal
-from app.config import settings
-from app.db import SessionLocal, get_db
+from app.db import get_db
 from app.ids import generate_id
-from app.ledger import append_event
 from app.models import Contract, Milestone
 from app.services.injection_scan import scan_for_injections
 from app.services.runner import ProcessRunner
@@ -127,6 +125,7 @@ def _run_scenario_resource_exhaustion(db: Session, org_id: str) -> Dict[str, Any
 
 def _run_scenario_time_travel_expiry(db: Session, org_id: str) -> Dict[str, Any]:
     from app.ledger import set_tenant_org
+
     set_tenant_org(db, org_id)
 
     # Create contract with deadline in the past
@@ -166,6 +165,7 @@ def _run_scenario_time_travel_expiry(db: Session, org_id: str) -> Dict[str, Any]
     # Attempt submission
     try:
         from app.ledger import set_tenant_org
+
         set_tenant_org(db, org_id)
         outcome = settle_milestone(
             db=db,
@@ -208,6 +208,7 @@ def _run_scenario_hidden_test_probe(db: Session, org_id: str) -> Dict[str, Any]:
 
 def _run_scenario_concurrent_double_spend(db: Session, org_id: str) -> Dict[str, Any]:
     from app.ledger import set_tenant_org
+
     set_tenant_org(db, org_id)
 
     # Create funded contract
@@ -245,12 +246,15 @@ def _run_scenario_concurrent_double_spend(db: Session, org_id: str) -> Dict[str,
     sol = "def solve(): return 42\n"
 
     from sqlalchemy.orm import sessionmaker
+
     session_factory = sessionmaker(bind=db.get_bind())
     results = []
+
     def _worker_attempt():
         with session_factory() as worker_db:
             try:
                 from app.ledger import set_tenant_org
+
                 set_tenant_org(worker_db, org_id)
                 outcome = settle_milestone(
                     db=worker_db,
@@ -271,7 +275,7 @@ def _run_scenario_concurrent_double_spend(db: Session, org_id: str) -> Dict[str,
 
     paid_count = sum(1 for r in results if r.get("status") in ("PAID", "COMPLETED"))
     # Invariant: exactly 1 payout occurs!
-    defense_triggered = (paid_count == 1)
+    defense_triggered = paid_count == 1
 
     return {
         "scenario": "concurrent_race_double_spend",
@@ -336,11 +340,13 @@ def run_playground_scenarios(
             if not res.get("blocked"):
                 all_defenses_passed = False
         except Exception as exc:
-            results.append({
-                "scenario": key,
-                "blocked": False,
-                "error": str(exc),
-            })
+            results.append(
+                {
+                    "scenario": key,
+                    "blocked": False,
+                    "error": str(exc),
+                }
+            )
             all_defenses_passed = False
 
     return {

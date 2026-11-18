@@ -1,14 +1,17 @@
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.db import get_db, org_session
+from app.db import get_db
 from app.ids import generate_id
-from app.models import ApiKey, LoginAttempt, Membership, Organization, Session as UserSession, User
+from app.models import ApiKey, LoginAttempt, Membership, Organization, User
+from app.models import Session as UserSession
 from app.services.auth import (
     ROLE_PERMISSIONS,
     VALID_API_KEY_SCOPES,
@@ -31,6 +34,7 @@ router = APIRouter(prefix="/v1/auth", tags=["Authentication & Access"])
 # SCHEMAS
 # ==============================================================================
 
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=12)
@@ -51,6 +55,7 @@ class CreateApiKeyRequest(BaseModel):
 
 class Principal:
     """Represents the authenticated caller, either a user session or an API key."""
+
     def __init__(
         self,
         user_id: Optional[str],
@@ -87,10 +92,12 @@ class Principal:
 
 def require_principal(required_scope: Optional[str] = None):
     """FastAPI dependency yielding an authenticated Principal with an enforced scope."""
+
     def dependency(principal: Principal = Depends(get_current_principal)) -> Principal:
         if required_scope:
             principal.require_scope(required_scope)
         return principal
+
     return dependency
 
 
@@ -98,17 +105,15 @@ def require_principal(required_scope: Optional[str] = None):
 # LOGIN THROTTLING & HELPERS
 # ==============================================================================
 
+
 def check_login_throttling(db: Session, email: str, ip_address: str) -> None:
     """Enforces 5 failures per (email, IP) per 15 minutes window."""
     window_start = datetime.now(timezone.utc) - timedelta(minutes=15)
-    stmt = (
-        select(func.count(LoginAttempt.id))
-        .where(
-            LoginAttempt.email == email.lower(),
-            LoginAttempt.ip_address == ip_address,
-            LoginAttempt.success == False,
-            LoginAttempt.attempted_at >= window_start,
-        )
+    stmt = select(func.count(LoginAttempt.id)).where(
+        LoginAttempt.email == email.lower(),
+        LoginAttempt.ip_address == ip_address,
+        LoginAttempt.success == False,
+        LoginAttempt.attempted_at >= window_start,
     )
     failed_count = db.scalar(stmt) or 0
     if failed_count >= 5:
@@ -141,6 +146,7 @@ def get_client_ip(request: Request) -> str:
 # AUTH DEPENDENCIES
 # ==============================================================================
 
+
 def get_current_principal(
     request: Request,
     authorization: Optional[str] = Header(None),
@@ -167,8 +173,8 @@ def get_current_principal(
             lookup_id = parts[2]
             secret = parts[3]
 
-            stmt = select(ApiKey).where(ApiKey.lookup_id == lookup_id, ApiKey.revoked_at.is_(None))
-            api_key = db.scalar(stmt)
+            key_stmt = select(ApiKey).where(ApiKey.lookup_id == lookup_id, ApiKey.revoked_at.is_(None))
+            api_key = db.scalar(key_stmt)
             if not api_key or not verify_api_key_secret(secret, api_key.secret_hash):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
 
@@ -187,8 +193,8 @@ def get_current_principal(
         else:
             # Bearer Session Token
             token_h = hash_token(token)
-            stmt = select(UserSession).where(UserSession.token_hash == token_h)
-            sess = db.scalar(stmt)
+            sess_stmt = select(UserSession).where(UserSession.token_hash == token_h)
+            sess = db.scalar(sess_stmt)
             if not sess or sess.expires_at < now or (now - sess.last_active_at) > timedelta(hours=24):
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
 
@@ -196,7 +202,9 @@ def get_current_principal(
             db.commit()
 
             # Find default/first membership
-            mem = db.scalar(select(Membership).where(Membership.user_id == sess.user_id).order_by(Membership.created_at))
+            mem = db.scalar(
+                select(Membership).where(Membership.user_id == sess.user_id).order_by(Membership.created_at)
+            )
             org_id = mem.org_id if mem else ""
             role = mem.role if mem else "viewer"
 
@@ -215,8 +223,8 @@ def get_current_principal(
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token validation failed")
 
         token_h = hash_token(paylap_session)
-        stmt = select(UserSession).where(UserSession.token_hash == token_h)
-        sess = db.scalar(stmt)
+        c_sess_stmt = select(UserSession).where(UserSession.token_hash == token_h)
+        sess = db.scalar(c_sess_stmt)
         if not sess or sess.expires_at < now or (now - sess.last_active_at) > timedelta(hours=24):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
 
@@ -242,12 +250,15 @@ def get_current_principal(
 # AUTH ROUTES
 # ==============================================================================
 
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 def signup(payload: SignupRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     # 1. Signup mode validation
     if settings.PAYLAP_SIGNUP_MODE == "closed":
         if not payload.signup_code or payload.signup_code != settings.PAYLAP_SIGNUP_CODE:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signup is closed. Valid invite code required.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Signup is closed. Valid invite code required."
+            )
 
     # 2. Password strength
     pwd_err = validate_password_strength(payload.password)
@@ -379,7 +390,13 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     if mem:
         org = db.scalar(select(Organization).where(Organization.id == mem.org_id))
         if org:
-            org_data = {"id": org.id, "name": org.name, "slug": org.slug, "role": mem.role, "live_enabled": org.live_enabled}
+            org_data = {
+                "id": org.id,
+                "name": org.name,
+                "slug": org.slug,
+                "role": mem.role,
+                "live_enabled": org.live_enabled,
+            }
 
     return {
         "user": {"id": user.id, "email": user.email},
@@ -422,14 +439,16 @@ def get_me(principal: Principal = Depends(get_current_principal), db: Session = 
     for m in memberships:
         org = db.scalar(select(Organization).where(Organization.id == m.org_id))
         if org:
-            org_list.append({
-                "org_id": org.id,
-                "name": org.name,
-                "slug": org.slug,
-                "role": m.role,
-                "live_enabled": org.live_enabled,
-                "arbiter_enabled": org.arbiter_enabled,
-            })
+            org_list.append(
+                {
+                    "org_id": org.id,
+                    "name": org.name,
+                    "slug": org.slug,
+                    "role": m.role,
+                    "live_enabled": org.live_enabled,
+                    "arbiter_enabled": org.arbiter_enabled,
+                }
+            )
 
     return {
         "type": "user",
@@ -444,6 +463,7 @@ def get_me(principal: Principal = Depends(get_current_principal), db: Session = 
 # ==============================================================================
 # API KEYS MANAGEMENT
 # ==============================================================================
+
 
 @router.post("/keys", status_code=status.HTTP_201_CREATED)
 def create_api_key(

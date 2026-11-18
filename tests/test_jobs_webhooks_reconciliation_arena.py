@@ -1,18 +1,20 @@
-from datetime import datetime, timedelta, timezone
 import json
 import uuid
+from datetime import datetime, timezone
+
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from starlette.testclient import TestClient
+
 from app.auth import get_password_hash
-from app.config import settings
-from app.db import SessionLocal, get_db
+from app.db import get_db
 from app.ids import generate_id
 from app.ledger import append_event
 from app.main import app
 from app.models import (
     ApiKey,
     Contract,
-    Event,
     Membership,
     Milestone,
     Organization,
@@ -20,19 +22,14 @@ from app.models import (
     WebhookDelivery,
     WebhookEndpoint,
 )
-from app.services.reconciliation import run_reconciliation
 from app.services.webhooks import (
     RETRY_BACKOFFS,
     compute_webhook_signature,
     deliver_webhook_sync,
     is_safe_webhook_url,
-    process_pending_webhooks,
     verify_webhook_signature,
 )
 from app.state import ContractStatus, MilestoneStatus
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 TEST_PG_URL = "postgresql+psycopg://paylap_owner:paylap_owner_pass@localhost:5432/paylap_test"
 test_engine = create_engine(TEST_PG_URL, pool_pre_ping=True)
@@ -84,6 +81,7 @@ def auth_org(db_session):
     lookup_id = raw_key.split("_")[2]
     secret = raw_key.split("_")[3]
     import hashlib
+
     api_key = ApiKey(
         id=generate_id("key"),
         org_id=org_id,
@@ -107,6 +105,7 @@ def auth_org(db_session):
     db_session.commit()
 
     from app.ledger import set_tenant_org
+
     set_tenant_org(db_session, org_id)
 
     return {
@@ -121,6 +120,7 @@ def client(auth_org):
     def override_get_db():
         session = TestingSessionLocal()
         from app.ledger import set_tenant_org
+
         set_tenant_org(session, auth_org["org_id"])
         try:
             yield session
@@ -137,6 +137,7 @@ def client(auth_org):
 # ============================================================================
 # 1. SSRF Protection and Outbound Webhook Signatures
 # ============================================================================
+
 
 def test_ssrf_protection_blocks_reserved_and_private_ips():
     """
@@ -189,6 +190,7 @@ def test_webhook_signature_computation_and_verification():
 # 2. Webhook Retry Schedule and Backoff
 # ============================================================================
 
+
 def test_webhook_retry_schedule_and_backoff(db_session, auth_org):
     """
     Exit Gate: Webhook deliveries retry with backoffs (1m, 5m, 30m, 2h, 5h) and exhaust.
@@ -237,6 +239,7 @@ def test_webhook_retry_schedule_and_backoff(db_session, auth_org):
 # ============================================================================
 # 3. Inbound PayPal Webhook Deduplication & Contradiction Detection
 # ============================================================================
+
 
 def test_inbound_paypal_webhook_deduplication(client, db_session, auth_org):
     """
@@ -306,6 +309,7 @@ def test_inbound_paypal_contradiction_detection(client, db_session, auth_org):
 # 4. Reconciliation Discrepancy Reporting
 # ============================================================================
 
+
 def test_reconciliation_flags_discrepancies(client, db_session, auth_org):
     """
     Exit Gate: Reconciliation compares local contracts vs PayPal provider and flags discrepancies.
@@ -339,6 +343,7 @@ def test_reconciliation_flags_discrepancies(client, db_session, auth_org):
 # ============================================================================
 # 5. Red Team Arena (6/6 Scenarios Pass)
 # ============================================================================
+
 
 def test_playground_all_six_scenarios_pass(client):
     """
@@ -375,6 +380,7 @@ def test_playground_all_six_scenarios_pass(client):
 # ============================================================================
 # 6. Organization Stats and Worker Reputation
 # ============================================================================
+
 
 def test_org_stats_and_worker_reputation(client, db_session, auth_org):
     """
@@ -431,6 +437,7 @@ def test_org_stats_and_worker_reputation(client, db_session, auth_org):
 # ============================================================================
 # 7. SSE Stream
 # ============================================================================
+
 
 def test_sse_stream_poll_once(client, db_session, auth_org):
     """

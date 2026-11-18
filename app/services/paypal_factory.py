@@ -1,6 +1,6 @@
-from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.models import Organization, OrgPayPalCredential
 from app.services.crypto import decrypt_credential
@@ -55,9 +55,7 @@ def get_provider(org: Organization, environment: str, db: Session) -> PayPalBase
     if environment == "live":
         # Strict security gates for live environment
         if not settings.PAYLAP_ALLOW_LIVE:
-            raise LiveEnvironmentDisabledError(
-                "Live PayPal environment is globally disabled (PAYLAP_ALLOW_LIVE=false)"
-            )
+            raise LiveEnvironmentDisabledError("Live PayPal environment is globally disabled (PAYLAP_ALLOW_LIVE=false)")
         if not org.live_enabled:
             raise LiveEnvironmentDisabledError(
                 f"Organization '{org.id}' has not enabled live transactions (live_enabled=false)"

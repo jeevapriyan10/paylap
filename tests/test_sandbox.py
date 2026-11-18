@@ -1,6 +1,6 @@
 import os
-import pytest
-from app.services.sandbox import run_python_tests, screen_code_ast
+
+from app.services.sandbox import run_python_tests
 
 
 def test_sandbox_passing_code():

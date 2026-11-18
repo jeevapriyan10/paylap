@@ -1,8 +1,9 @@
 import pytest
+
 from app.state import (
     ContractStatus,
-    MilestoneStatus,
     InvalidStateTransitionError,
+    MilestoneStatus,
     transition_contract,
     transition_milestone,
 )
@@ -52,9 +53,7 @@ def test_contract_error_transition_requires_reason():
     with pytest.raises(InvalidStateTransitionError):
         transition_contract(ContractStatus.FUNDED, ContractStatus.ERROR, error_reason="")
 
-    s = transition_contract(
-        ContractStatus.FUNDED, ContractStatus.ERROR, error_reason="PayPal network crash"
-    )
+    s = transition_contract(ContractStatus.FUNDED, ContractStatus.ERROR, error_reason="PayPal network crash")
     assert s == ContractStatus.ERROR
 
 

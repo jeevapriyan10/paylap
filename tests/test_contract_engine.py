@@ -1,21 +1,21 @@
 import concurrent.futures
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
-from app.config import settings
+
 from app.db import get_db
 from app.ids import generate_id
 from app.main import app
-from app.models import ApiKey, Contract, Event, Membership, Milestone, Organization, User
+from app.models import ApiKey, Contract, Event, Membership, Organization, User
 from app.routers.auth import Principal, get_current_principal
 from app.services.auth import generate_api_key, hash_password
 from app.services.clock import FakeClock
 from app.services.expiry import expire_due_contracts
-from app.services.settlement import settle_milestone
-from app.state import ContractStatus, MilestoneStatus
+from app.state import ContractStatus
 
 TEST_PG_URL = "postgresql+psycopg://paylap_owner:paylap_owner_pass@localhost:5432/paylap_test"
 test_engine = create_engine(TEST_PG_URL, pool_pre_ping=True)
@@ -289,9 +289,7 @@ def test_concurrency_double_spend_prevention(client, db_session, auth_org):
     assert success_results[0].json()["status"] == "PAID"
 
     # Verify ledger has exactly ONE CAPTURE_COMPLETED and ONE PAYOUT_INITIATED event for this milestone
-    db_events = db_session.scalars(
-        select(Event).where(Event.contract_id == contract_id)
-    ).all()
+    db_events = db_session.scalars(select(Event).where(Event.contract_id == contract_id)).all()
 
     capture_events = [e for e in db_events if e.event_type == "CAPTURE_COMPLETED"]
     payout_events = [e for e in db_events if e.event_type == "PAYOUT_INITIATED"]
@@ -411,6 +409,7 @@ def test_planted_hidden_test_sentinel_never_leaks(client, db_session, auth_org):
     events = db_session.scalars(select(Event).where(Event.contract_id == contract_id)).all()
     for e in events:
         import json
+
         payload_str = json.dumps(e.payload)
         assert PLANTED_SENTINEL not in payload_str, f"Planted sentinel leaked in event seq {e.seq} payload!"
 

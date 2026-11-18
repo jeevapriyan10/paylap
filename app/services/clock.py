@@ -15,6 +15,7 @@ class SystemClock(Clock):
 
 class FakeClock(Clock):
     """Injectable fake clock for time-travel and expiry testing."""
+
     def __init__(self, initial_time: datetime):
         self._current = initial_time if initial_time.tzinfo else initial_time.replace(tzinfo=timezone.utc)
 

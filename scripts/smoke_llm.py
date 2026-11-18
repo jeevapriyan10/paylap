@@ -13,6 +13,7 @@ Usage:
 
 import os
 import sys
+
 import httpx
 
 # Ensure project root is on sys.path
@@ -38,19 +39,10 @@ def run_llm_smoke():
         sys.exit(1)
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
-    }
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": "Ping test: respond with verdict ok and empty reasons."}
-                ]
-            }
-        ],
+        "contents": [{"parts": [{"text": "Ping test: respond with verdict ok and empty reasons."}]}],
         "generationConfig": {
             "temperature": 0.0,
             "responseMimeType": "application/json",
@@ -58,11 +50,11 @@ def run_llm_smoke():
                 "type": "OBJECT",
                 "properties": {
                     "verdict": {"type": "STRING", "enum": ["ok", "veto"]},
-                    "reasons": {"type": "ARRAY", "items": {"type": "STRING"}}
+                    "reasons": {"type": "ARRAY", "items": {"type": "STRING"}},
                 },
-                "required": ["verdict", "reasons"]
-            }
-        }
+                "required": ["verdict", "reasons"],
+            },
+        },
     }
 
     try:

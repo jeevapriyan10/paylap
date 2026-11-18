@@ -1,22 +1,22 @@
-from datetime import datetime, timezone
 import hashlib
 import json
 import logging
 import secrets
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel, HttpUrl
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.auth import Principal, require_principal
 from app.config import settings
 from app.db import get_db
 from app.ids import generate_id
 from app.ledger import append_event
 from app.models import Contract, Event, WebhookDelivery, WebhookEndpoint
-from app.services.paypal_factory import get_provider
 from app.services.webhooks import (
-    compute_webhook_signature,
     deliver_webhook_sync,
     is_safe_webhook_url,
 )
@@ -42,6 +42,7 @@ class EndpointResponse(BaseModel):
 
 
 # --- Outbound Endpoints Management ---
+
 
 @router.post("/endpoints", response_model=EndpointResponse)
 def create_webhook_endpoint(
@@ -91,9 +92,7 @@ def list_webhook_endpoints(
     db: Session = Depends(get_db),
 ):
     """List registered webhook endpoints for the current organization."""
-    endpoints = db.scalars(
-        select(WebhookEndpoint).where(WebhookEndpoint.org_id == principal.org_id)
-    ).all()
+    endpoints = db.scalars(select(WebhookEndpoint).where(WebhookEndpoint.org_id == principal.org_id)).all()
 
     return [
         EndpointResponse(
@@ -178,7 +177,7 @@ def test_webhook_endpoint(
 # --- Inbound PayPal Webhooks Ingestion ---
 
 # In-memory deduplication cache for rapid check; also backed by DB query
-_INGESTED_PAYPAL_EVENTS = set()
+_INGESTED_PAYPAL_EVENTS: set[str] = set()
 
 
 @router.post("/paypal/{environment}")
@@ -259,9 +258,7 @@ async def ingest_paypal_webhook(
         contradiction_reason = "PayPal reported capture was DENIED for authorized payment"
 
     if contradiction:
-        logger.warning(
-            f"CONTRADICTION DETECTED on contract {contract.id}: {contradiction_reason}"
-        )
+        logger.warning(f"CONTRADICTION DETECTED on contract {contract.id}: {contradiction_reason}")
         contract.needs_attention = True
         contract.updated_at = now
 

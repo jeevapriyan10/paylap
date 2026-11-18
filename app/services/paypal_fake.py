@@ -1,6 +1,7 @@
 import time
 import uuid
 from typing import Any, Dict, Optional
+
 from app.services.paypal_base import PayPalBase
 
 
@@ -22,12 +23,7 @@ class FakePayPal(PayPalBase):
             time.sleep(self.delay_seconds)
 
     def create_escrow_order(
-        self,
-        contract_id: str,
-        amount_cents: int,
-        return_url: str,
-        cancel_url: str,
-        request_id: Optional[str] = None
+        self, contract_id: str, amount_cents: int, return_url: str, cancel_url: str, request_id: Optional[str] = None
     ) -> Dict[str, Any]:
         self._sleep()
         order_id = f"DEMO-ORD-{uuid.uuid4().hex[:8].upper()}"
@@ -42,11 +38,7 @@ class FakePayPal(PayPalBase):
         self.orders[order_id] = data
         return data
 
-    def authorize_order(
-        self,
-        order_id: str,
-        request_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def authorize_order(self, order_id: str, request_id: Optional[str] = None) -> Dict[str, Any]:
         self._sleep()
         auth_id = f"DEMO-AUTH-{uuid.uuid4().hex[:8].upper()}"
         data = {
@@ -58,13 +50,7 @@ class FakePayPal(PayPalBase):
         self.authorizations[auth_id] = data
         return data
 
-    def capture(
-        self,
-        authorization_id: str,
-        amount_cents: int,
-        final_capture: bool,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def capture(self, authorization_id: str, amount_cents: int, final_capture: bool, request_id: str) -> Dict[str, Any]:
         self._sleep()
         cap_id = f"DEMO-CAP-{uuid.uuid4().hex[:8].upper()}"
         data = {
@@ -78,11 +64,7 @@ class FakePayPal(PayPalBase):
         self.captures[cap_id] = data
         return data
 
-    def void_authorization(
-        self,
-        authorization_id: str,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def void_authorization(self, authorization_id: str, request_id: str) -> Dict[str, Any]:
         self._sleep()
         data = {
             "authorization_id": authorization_id,
@@ -94,11 +76,7 @@ class FakePayPal(PayPalBase):
         return data
 
     def send_payout(
-        self,
-        recipient_email: str,
-        amount_cents: int,
-        request_id: str,
-        note: str = "Milestone payout"
+        self, recipient_email: str, amount_cents: int, request_id: str, note: str = "Milestone payout"
     ) -> Dict[str, Any]:
         self._sleep()
         batch_id = f"DEMO-BATCH-{uuid.uuid4().hex[:8].upper()}"
@@ -113,10 +91,7 @@ class FakePayPal(PayPalBase):
         self.payouts[batch_id] = data
         return data
 
-    def get_payout_status(
-        self,
-        payout_batch_id: str
-    ) -> Dict[str, Any]:
+    def get_payout_status(self, payout_batch_id: str) -> Dict[str, Any]:
         self._sleep()
         payout = self.payouts.get(payout_batch_id, {})
         status = payout.get("status", "SUCCESS")

@@ -1,8 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from app.models import Contract, Event, Organization, Policy
+
+from app.models import Contract, Policy
 
 
 class PolicyViolation(Exception):
@@ -14,11 +16,10 @@ class PolicyViolation(Exception):
 
 def get_or_create_policy(db: Session, org_id: str, environment: str) -> Policy:
     """Retrieve per-org environment policy, or create default policy if not set."""
-    policy = db.scalar(
-        select(Policy).where(Policy.org_id == org_id, Policy.environment == environment)
-    )
+    policy = db.scalar(select(Policy).where(Policy.org_id == org_id, Policy.environment == environment))
     if not policy:
         from app.ids import generate_id
+
         now = datetime.now(timezone.utc)
         policy = Policy(
             id=generate_id("pol"),
@@ -62,14 +63,17 @@ def evaluate_spend_policy(
 
     # 2. Daily Spend Cap Check (sum of created/funded contracts today + proposed amount)
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    spent_today = db.scalar(
-        select(func.coalesce(func.sum(Contract.total_cents), 0)).where(
-            Contract.org_id == org_id,
-            Contract.environment == environment,
-            Contract.created_at >= today_start,
-            Contract.status.notin_(["VOIDED", "CANCELLED", "BLOCKED"]),
+    spent_today = (
+        db.scalar(
+            select(func.coalesce(func.sum(Contract.total_cents), 0)).where(
+                Contract.org_id == org_id,
+                Contract.environment == environment,
+                Contract.created_at >= today_start,
+                Contract.status.notin_(["VOIDED", "CANCELLED", "BLOCKED"]),
+            )
         )
-    ) or 0
+        or 0
+    )
 
     if spent_today + total_cents > policy.daily_cap_cents:
         violations.append(
@@ -77,10 +81,10 @@ def evaluate_spend_policy(
             f"({policy.daily_cap_cents - spent_today} cents remaining of {policy.daily_cap_cents} cents cap)"
         )
 
-    # 3. Max Milestones Check (max 5)
-    if len(milestones) > policy.max_milestones:
+    # 3. Milestones Count Check (1 to max 5)
+    if len(milestones) < 1 or len(milestones) > policy.max_milestones:
         violations.append(
-            f"Milestones count ({len(milestones)}) exceeds maximum allowed ({policy.max_milestones})"
+            f"Milestones count ({len(milestones)}) violates policy (must be 1 to {policy.max_milestones})"
         )
 
     # 4. Worker Allowlist Check
@@ -102,11 +106,32 @@ def evaluate_spend_policy(
         deadline_tz = deadline_at if deadline_at.tzinfo else deadline_at.replace(tzinfo=timezone.utc)
         duration_days = (deadline_tz - now).total_seconds() / 86400.0
         if duration_days > policy.max_contract_days:
-            violations.append(
-                f"Contract deadline exceeds maximum allowed duration ({policy.max_contract_days} days)"
-            )
+            violations.append(f"Contract deadline exceeds maximum allowed duration ({policy.max_contract_days} days)")
 
     return len(violations) == 0, violations
+
+
+def validate_spend_policy(
+    db: Any,
+    buyer_id: str,
+    worker_email: str,
+    total_cents: int,
+    milestone_count: int,
+) -> Tuple[bool, List[str]]:
+    """Legacy compatibility helper for milestone spend validation."""
+    dummy_milestones = [
+        {"amount_minor": total_cents // max(1, milestone_count), "hidden_tests": "def test_hidden(): pass"}
+        for _ in range(milestone_count)
+    ]
+    return evaluate_spend_policy(
+        db=db,
+        org_id=buyer_id,
+        environment="simulated",
+        total_cents=total_cents,
+        milestones=dummy_milestones,
+        worker_email=worker_email,
+        deadline_at=None,
+    )
 
 
 def mask_email(email: str) -> str:

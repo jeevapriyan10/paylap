@@ -1,8 +1,10 @@
 import base64
 import os
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
+
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.orm import Session
+
 from app.config import settings
 
 
@@ -112,6 +114,7 @@ def reencrypt_credential(
 def rotate_all_credentials_master_key(db: Session, target_key_id: str) -> int:
     """Rotate all stored PayPal client secrets in the DB to target_key_id."""
     from app.models import OrgPayPalCredential
+
     credentials = db.query(OrgPayPalCredential).all()
     count = 0
     for cred in credentials:

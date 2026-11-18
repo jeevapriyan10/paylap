@@ -1,15 +1,15 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, Set
 
 # Regex patterns for sensitive data redaction
 REDACT_PATTERNS = [
-    (re.compile(r'pl_(test|live)_[a-zA-Z0-9]{8,16}_[a-zA-Z0-9]{16,64}'), '[REDACTED_API_KEY]'),
+    (re.compile(r"pl_(test|live)_[a-zA-Z0-9]{8,16}_[a-zA-Z0-9]{16,64}"), "[REDACTED_API_KEY]"),
     (re.compile(r'(?i)(password|secret|client_secret)["\']?\s*[:=]\s*["\']?([^"\'\s,}{]+)'), r'\1: "[REDACTED]"'),
-    (re.compile(r'(?i)authorization:\s*bearer\s+[a-zA-Z0-9_\-\.]+'), 'Authorization: Bearer [REDACTED]'),
-    (re.compile(r'(?i)paylap_session=([^;\s]+)'), 'paylap_session=[REDACTED]'),
-    (re.compile(r'(?i)paylap_csrf=([^;\s]+)'), 'paylap_csrf=[REDACTED]'),
+    (re.compile(r"(?i)authorization:\s*bearer\s+[a-zA-Z0-9_\-\.]+"), "Authorization: Bearer [REDACTED]"),
+    (re.compile(r"(?i)paylap_session=([^;\s]+)"), "paylap_session=[REDACTED]"),
+    (re.compile(r"(?i)paylap_csrf=([^;\s]+)"), "paylap_csrf=[REDACTED]"),
 ]
 
 # Planted sentinels and hidden-test keywords to scrub
@@ -32,6 +32,7 @@ class RedactingJsonFormatter(logging.Formatter):
     - Authorization headers
     - Hidden test code and sentinels
     """
+
     def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
 

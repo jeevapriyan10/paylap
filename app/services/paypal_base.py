@@ -4,12 +4,13 @@ from typing import Any, Dict, Optional
 
 class PayPalError(Exception):
     """Custom exception for PayPal API errors without exposing credentials."""
+
     def __init__(
         self,
         message: str,
         status_code: Optional[int] = None,
         debug_id: Optional[str] = None,
-        details: Optional[Any] = None
+        details: Optional[Any] = None,
     ):
         super().__init__(message)
         self.message = message
@@ -31,60 +32,34 @@ class PayPalBase(ABC):
 
     @abstractmethod
     def create_escrow_order(
-        self,
-        contract_id: str,
-        amount_cents: int,
-        return_url: str,
-        cancel_url: str,
-        request_id: Optional[str] = None
+        self, contract_id: str, amount_cents: int, return_url: str, cancel_url: str, request_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create an order with intent=AUTHORIZE and return order details with approval URL."""
         pass
 
     @abstractmethod
-    def authorize_order(
-        self,
-        order_id: str,
-        request_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def authorize_order(self, order_id: str, request_id: Optional[str] = None) -> Dict[str, Any]:
         """Authorize the approved order and return authorization details."""
         pass
 
     @abstractmethod
-    def capture(
-        self,
-        authorization_id: str,
-        amount_cents: int,
-        final_capture: bool,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def capture(self, authorization_id: str, amount_cents: int, final_capture: bool, request_id: str) -> Dict[str, Any]:
         """Capture a specific amount from the authorization."""
         pass
 
     @abstractmethod
-    def void_authorization(
-        self,
-        authorization_id: str,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def void_authorization(self, authorization_id: str, request_id: str) -> Dict[str, Any]:
         """Void an authorization, releasing any remaining hold."""
         pass
 
     @abstractmethod
     def send_payout(
-        self,
-        recipient_email: str,
-        amount_cents: int,
-        request_id: str,
-        note: str = "Milestone payout"
+        self, recipient_email: str, amount_cents: int, request_id: str, note: str = "Milestone payout"
     ) -> Dict[str, Any]:
         """Send a payout to the worker via PayPal Payouts."""
         pass
 
     @abstractmethod
-    def get_payout_status(
-        self,
-        payout_batch_id: str
-    ) -> Dict[str, Any]:
+    def get_payout_status(self, payout_batch_id: str) -> Dict[str, Any]:
         """Retrieve latest payout batch status."""
         pass

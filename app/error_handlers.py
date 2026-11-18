@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Mapping, Optional
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -15,7 +16,7 @@ def create_error_response(
     message: str,
     request_id: str,
     details: Optional[Any] = None,
-    headers: Optional[Dict[str, str]] = None,
+    headers: Optional[Mapping[str, str]] = None,
 ) -> JSONResponse:
     payload = {
         "error": {
@@ -36,7 +37,7 @@ def register_error_handlers(app: FastAPI) -> None:
         request_id = getattr(request.state, "request_id", "req_unknown")
         error_type = "client_error" if exc.status_code < 500 else "server_error"
         code = f"http_{exc.status_code}"
-        
+
         # Friendly codes
         if exc.status_code == 401:
             code = "unauthorized"

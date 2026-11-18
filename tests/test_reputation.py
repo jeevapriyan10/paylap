@@ -1,29 +1,24 @@
-import pytest
-from fastapi.testclient import TestClient
-from app.db import get_db
+import uuid
+
+from app.db import set_tenant_org
+from app.ids import generate_id
 from app.ledger import append_event
-from app.main import app
-from app.models import Contract, Milestone
-from app.services.reputation import compute_worker_reputation, list_worker_reputations
+from app.models import Contract, Milestone, Organization
+from app.services.reputation import compute_worker_reputation
 from app.state import MilestoneStatus
 
 
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+def _create_rep_org(db_session):
+    org_id = generate_id("org")
+    org = Organization(id=org_id, name="Reputation Org", slug=f"slug_{org_id}", live_enabled=False)
+    db_session.add(org)
+    db_session.commit()
+    set_tenant_org(db_session, org_id)
+    return org_id
 
 
 def test_reputation_empty(db_session):
-    rep = compute_worker_reputation(db_session, "non_existent_worker")
+    rep = compute_worker_reputation(db_session, f"non_existent_{uuid.uuid4().hex[:8]}")
     assert rep["score"] == 0
     assert rep["attempted_milestones"] == 0
     assert rep["paid_milestones"] == 0
@@ -31,33 +26,34 @@ def test_reputation_empty(db_session):
 
 
 def test_reputation_honest_high_volume(db_session):
-    worker_id = "honest_worker_1"
+    org_id = _create_rep_org(db_session)
+    worker_id = f"honest_worker_{uuid.uuid4().hex[:8]}"
     # Create contract with 5 paid milestones
     c = Contract(
-        id="c_honest",
+        id=generate_id("ctr"),
+        org_id=org_id,
         title="Honest Work",
-        buyer_id="buyer_h",
         worker_id=worker_id,
-        worker_email="honest@corp.com",
+        worker_email=f"{worker_id}@corp.com",
         total_cents=1000,
         currency="USD",
         status="COMPLETED",
-        mode="demo",
-        max_attempts=2,
+        environment="simulated",
     )
     db_session.add(c)
 
     for i in range(1, 6):
         m = Milestone(
-            id=f"m_honest_{i}",
+            id=generate_id("mst"),
+            org_id=org_id,
             contract_id=c.id,
-            idx=i,
+            sequence=i,
             title=f"M{i}",
             amount_cents=200,
             spec="s",
             public_tests="t",
             status=MilestoneStatus.PAID.value,
-            attempts=1,
+            attempts_count=1,
         )
         db_session.add(m)
 
@@ -73,31 +69,32 @@ def test_reputation_honest_high_volume(db_session):
 
 
 def test_reputation_dampener_low_attempts(db_session):
-    worker_id = "junior_worker_1"
+    org_id = _create_rep_org(db_session)
+    worker_id = f"junior_worker_{uuid.uuid4().hex[:8]}"
     # 1 paid milestone: dampener = 1/5 = 0.2
     c = Contract(
-        id="c_junior",
+        id=generate_id("ctr"),
+        org_id=org_id,
         title="Junior Work",
-        buyer_id="buyer_j",
         worker_id=worker_id,
-        worker_email="junior@corp.com",
+        worker_email=f"{worker_id}@corp.com",
         total_cents=200,
         currency="USD",
         status="COMPLETED",
-        mode="demo",
-        max_attempts=2,
+        environment="simulated",
     )
     db_session.add(c)
     m = Milestone(
-        id="m_junior_1",
+        id=generate_id("mst"),
+        org_id=org_id,
         contract_id=c.id,
-        idx=1,
+        sequence=1,
         title="M1",
         amount_cents=200,
         spec="s",
         public_tests="t",
         status=MilestoneStatus.PAID.value,
-        attempts=1,
+        attempts_count=1,
     )
     db_session.add(m)
     db_session.commit()
@@ -109,55 +106,58 @@ def test_reputation_dampener_low_attempts(db_session):
 
 
 def test_reputation_security_penalties(db_session):
-    worker_id = "malicious_worker_1"
+    org_id = _create_rep_org(db_session)
+    worker_id = f"malicious_worker_{uuid.uuid4().hex[:8]}"
     # 5 attempted, 4 paid, but had 1 injection (-30), 1 AST violation (-15), 1 arbiter veto (-10)
     c = Contract(
-        id="c_mal",
+        id=generate_id("ctr"),
+        org_id=org_id,
         title="Malicious Work",
-        buyer_id="buyer_m",
         worker_id=worker_id,
-        worker_email="bad@corp.com",
+        worker_email=f"{worker_id}@corp.com",
         total_cents=1000,
         currency="USD",
         status="COMPLETED",
-        mode="demo",
-        max_attempts=2,
+        environment="simulated",
     )
     db_session.add(c)
 
     for i in range(1, 5):
         m = Milestone(
-            id=f"m_mal_{i}",
+            id=generate_id("mst"),
+            org_id=org_id,
             contract_id=c.id,
-            idx=i,
+            sequence=i,
             title=f"M{i}",
             amount_cents=200,
             spec="s",
             public_tests="t",
             status=MilestoneStatus.PAID.value,
-            attempts=1,
+            attempts_count=1,
         )
         db_session.add(m)
 
     # 1 rejected milestone
     m_fail = Milestone(
-        id="m_mal_5",
+        id=generate_id("mst"),
+        org_id=org_id,
         contract_id=c.id,
-        idx=5,
+        sequence=5,
         title="M5",
         amount_cents=200,
         spec="s",
         public_tests="t",
         status=MilestoneStatus.REJECTED.value,
-        attempts=2,
+        attempts_count=2,
     )
     db_session.add(m_fail)
     db_session.commit()
 
     # Append penalty events
-    append_event(db_session, "INJECTION_ATTEMPT_DETECTED", {"reason": "test"}, contract_id=c.id)
-    append_event(db_session, "AST_VIOLATION", {"reason": "import os"}, contract_id=c.id)
-    append_event(db_session, "ARBITER_VETO", {"reason": "cheating"}, contract_id=c.id)
+    append_event(db_session, "INJECTION_ATTEMPT_DETECTED", {"reason": "test"}, contract_id=c.id, org_id=org_id)
+    append_event(db_session, "AST_VIOLATION", {"reason": "import os"}, contract_id=c.id, org_id=org_id)
+    append_event(db_session, "ARBITER_VETO", {"reason": "cheating"}, contract_id=c.id, org_id=org_id)
+    db_session.commit()
 
     rep = compute_worker_reputation(db_session, worker_id)
     # pass_rate = 4/5 * 100 = 80.0
@@ -172,44 +172,45 @@ def test_reputation_security_penalties(db_session):
     assert rep["score"] == 25
 
 
-def test_reputation_api_endpoints(client, db_session):
+def test_reputation_api_endpoints(client, db_session, auth_org):
+    worker_id = f"api_worker_{uuid.uuid4().hex[:8]}"
     # Setup worker via contract
     c = Contract(
-        id="c_api_w",
+        id=generate_id("ctr"),
+        org_id=auth_org["org_id"],
         title="API Worker Contract",
-        buyer_id="buyer_api",
-        worker_id="api_worker_99",
-        worker_email="api_worker@corp.com",
+        worker_id=worker_id,
+        worker_email=f"{worker_id}@corp.com",
         total_cents=500,
         currency="USD",
         status="COMPLETED",
-        mode="demo",
-        max_attempts=1,
+        environment="simulated",
     )
     db_session.add(c)
     m = Milestone(
-        id="m_api_w",
+        id=generate_id("mst"),
+        org_id=auth_org["org_id"],
         contract_id=c.id,
-        idx=1,
+        sequence=1,
         title="M1",
         amount_cents=500,
         spec="s",
         public_tests="t",
         status=MilestoneStatus.PAID.value,
-        attempts=1,
+        attempts_count=1,
     )
     db_session.add(m)
     db_session.commit()
 
-    # GET /api/workers
-    res_list = client.get("/api/workers")
+    # GET /v1/workers
+    res_list = client.get("/v1/workers")
     assert res_list.status_code == 200
     workers = res_list.json()
-    assert any(w["worker_id"] == "api_worker_99" for w in workers)
+    assert any(w["worker_id"] == worker_id for w in workers)
 
-    # GET /api/workers/{worker_id}
-    res_single = client.get("/api/workers/api_worker_99")
+    # GET /v1/workers/{worker_id}
+    res_single = client.get(f"/v1/workers/{worker_id}")
     assert res_single.status_code == 200
     single = res_single.json()
-    assert single["worker_id"] == "api_worker_99"
+    assert single["worker_id"] == worker_id
     assert single["total_earned_usd"] == "5.00"

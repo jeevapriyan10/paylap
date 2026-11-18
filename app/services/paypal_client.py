@@ -1,7 +1,9 @@
 import threading
 import time
 from typing import Any, Dict, Optional
+
 import httpx
+
 from app.config import settings
 from app.schemas import cents_to_usd_str
 from app.services.paypal_base import PayPalBase, PayPalError
@@ -19,7 +21,7 @@ class PayPalClient(PayPalBase):
         client_secret: Optional[str] = None,
         base_url: Optional[str] = None,
         transport: Optional[httpx.BaseTransport] = None,
-        timeout: float = 15.0
+        timeout: float = 15.0,
     ):
         self.client_id = client_id or settings.PAYPAL_CLIENT_ID
         self.client_secret = client_secret or settings.PAYPAL_CLIENT_SECRET
@@ -44,10 +46,7 @@ class PayPalClient(PayPalBase):
                     token_url,
                     auth=(self.client_id, self.client_secret),
                     data={"grant_type": "client_credentials"},
-                    headers={
-                        "Accept": "application/json",
-                        "Accept-Language": "en_US"
-                    }
+                    headers={"Accept": "application/json", "Accept-Language": "en_US"},
                 )
             except httpx.RequestError as exc:
                 raise PayPalError(f"Network error during PayPal OAuth token fetch: {exc}") from exc
@@ -87,20 +86,10 @@ class PayPalClient(PayPalBase):
             if "debug_id" in error_data and not debug_id:
                 debug_id = error_data["debug_id"]
 
-        raise PayPalError(
-            message=msg,
-            status_code=response.status_code,
-            debug_id=debug_id,
-            details=error_data
-        )
+        raise PayPalError(message=msg, status_code=response.status_code, debug_id=debug_id, details=error_data)
 
     def create_escrow_order(
-        self,
-        contract_id: str,
-        amount_cents: int,
-        return_url: str,
-        cancel_url: str,
-        request_id: Optional[str] = None
+        self, contract_id: str, amount_cents: int, return_url: str, cancel_url: str, request_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Create a PayPal order with intent=AUTHORIZE and buyer-approval redirect URLs.
@@ -114,10 +103,7 @@ class PayPalClient(PayPalBase):
                 {
                     "reference_id": contract_id,
                     "description": f"PayLap Escrow Hold for Contract {contract_id}",
-                    "amount": {
-                        "currency_code": "USD",
-                        "value": amount_val
-                    }
+                    "amount": {"currency_code": "USD", "value": amount_val},
                 }
             ],
             "payment_source": {
@@ -129,10 +115,10 @@ class PayPalClient(PayPalBase):
                         "landing_page": "LOGIN",
                         "user_action": "PAY_NOW",
                         "return_url": return_url,
-                        "cancel_url": cancel_url
+                        "cancel_url": cancel_url,
                     }
                 }
-            }
+            },
         }
 
         headers = self._auth_headers(request_id)
@@ -160,14 +146,10 @@ class PayPalClient(PayPalBase):
             "status": data.get("status"),
             "approve_url": approve_url,
             "raw": data,
-            "simulated": False
+            "simulated": False,
         }
 
-    def authorize_order(
-        self,
-        order_id: str,
-        request_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def authorize_order(self, order_id: str, request_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Authorize the payment for an approved order.
         Extracts authorization id from purchase_units[0].payments.authorizations[0].id.
@@ -188,35 +170,18 @@ class PayPalClient(PayPalBase):
             auth_id = auth_obj["id"]
             auth_status = auth_obj.get("status", "CREATED")
         except (KeyError, IndexError) as exc:
-            raise PayPalError(
-                f"Unexpected authorization response structure: {data}",
-                details=data
-            ) from exc
+            raise PayPalError(f"Unexpected authorization response structure: {data}", details=data) from exc
 
-        return {
-            "authorization_id": auth_id,
-            "status": auth_status,
-            "raw": data,
-            "simulated": False
-        }
+        return {"authorization_id": auth_id, "status": auth_status, "raw": data, "simulated": False}
 
-    def capture(
-        self,
-        authorization_id: str,
-        amount_cents: int,
-        final_capture: bool,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def capture(self, authorization_id: str, amount_cents: int, final_capture: bool, request_id: str) -> Dict[str, Any]:
         """
         Capture a specific amount from an authorization hold.
         """
         url = f"{self.base_url}/v2/payments/authorizations/{authorization_id}/capture"
         payload = {
-            "amount": {
-                "currency_code": "USD",
-                "value": cents_to_usd_str(amount_cents)
-            },
-            "final_capture": final_capture
+            "amount": {"currency_code": "USD", "value": cents_to_usd_str(amount_cents)},
+            "final_capture": final_capture,
         }
         headers = self._auth_headers(request_id)
         try:
@@ -233,14 +198,10 @@ class PayPalClient(PayPalBase):
             "status": data.get("status"),
             "amount_cents": amount_cents,
             "raw": data,
-            "simulated": False
+            "simulated": False,
         }
 
-    def void_authorization(
-        self,
-        authorization_id: str,
-        request_id: str
-    ) -> Dict[str, Any]:
+    def void_authorization(self, authorization_id: str, request_id: str) -> Dict[str, Any]:
         """
         Void the authorization hold.
         """
@@ -259,15 +220,11 @@ class PayPalClient(PayPalBase):
             "authorization_id": authorization_id,
             "status": data.get("status", "VOIDED"),
             "raw": data,
-            "simulated": False
+            "simulated": False,
         }
 
     def send_payout(
-        self,
-        recipient_email: str,
-        amount_cents: int,
-        request_id: str,
-        note: str = "Milestone payout"
+        self, recipient_email: str, amount_cents: int, request_id: str, note: str = "Milestone payout"
     ) -> Dict[str, Any]:
         """
         Send single payout via PayPal Payouts batch API.
@@ -279,20 +236,17 @@ class PayPalClient(PayPalBase):
             "sender_batch_header": {
                 "sender_batch_id": request_id,
                 "email_subject": "PayLap Milestone Payment",
-                "email_message": "Payment for verified milestone completion on PayLap."
+                "email_message": "Payment for verified milestone completion on PayLap.",
             },
             "items": [
                 {
                     "recipient_type": "EMAIL",
-                    "amount": {
-                        "value": amount_val,
-                        "currency": "USD"
-                    },
+                    "amount": {"value": amount_val, "currency": "USD"},
                     "receiver": recipient_email,
                     "note": note,
-                    "sender_item_id": f"item-{request_id}"
+                    "sender_item_id": f"item-{request_id}",
                 }
-            ]
+            ],
         }
 
         headers = self._auth_headers(request_id)
@@ -310,13 +264,10 @@ class PayPalClient(PayPalBase):
             "payout_batch_id": batch_header.get("payout_batch_id"),
             "status": batch_header.get("batch_status", "PENDING"),
             "raw": data,
-            "simulated": False
+            "simulated": False,
         }
 
-    def get_payout_status(
-        self,
-        payout_batch_id: str
-    ) -> Dict[str, Any]:
+    def get_payout_status(self, payout_batch_id: str) -> Dict[str, Any]:
         """
         Query status of a payout batch.
         """
@@ -336,5 +287,5 @@ class PayPalClient(PayPalBase):
             "payout_batch_id": payout_batch_id,
             "status": batch_header.get("batch_status", "UNKNOWN"),
             "raw": data,
-            "simulated": False
+            "simulated": False,
         }

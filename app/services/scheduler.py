@@ -1,8 +1,10 @@
 import asyncio
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 from typing import Optional
+
 from sqlalchemy import select, text
+
 from app.config import settings
 from app.db import SessionLocal
 from app.models import Organization

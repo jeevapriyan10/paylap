@@ -1,7 +1,6 @@
 import base64
-import os
-import secrets
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple
+from typing import Any, Dict, List, Literal, Set, Tuple
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -39,7 +38,7 @@ class Settings(BaseSettings):
     # LLM Arbiter Configuration
     PAYLAP_LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     PAYLAP_LLM_HOURLY_CAP_PER_ORG: int = 60
 
     # Backwards-compatible / Stage 2 aliases
@@ -60,11 +59,7 @@ class Settings(BaseSettings):
     PAYLAP_POLICY_ALLOWLIST: str = ""
     ARENA_WORKER_SOURCE: Literal["auto", "gemini", "canned"] = "auto"
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @field_validator("PAYLAP_CORS_ORIGINS", mode="before")
     @classmethod
@@ -126,9 +121,7 @@ class Settings(BaseSettings):
 
             # 3. Insecure runner rejection
             if self.PAYLAP_RUNNER == "process" and not self.PAYLAP_ALLOW_INSECURE_RUNNER:
-                raise ValueError(
-                    "Production refuses process runner unless PAYLAP_ALLOW_INSECURE_RUNNER=true"
-                )
+                raise ValueError("Production refuses process runner unless PAYLAP_ALLOW_INSECURE_RUNNER=true")
 
         return self
 
@@ -154,11 +147,7 @@ class Settings(BaseSettings):
     def policy_allowlist_set(self) -> Set[str]:
         if not self.PAYLAP_POLICY_ALLOWLIST:
             return set()
-        return {
-            email.strip().lower()
-            for email in self.PAYLAP_POLICY_ALLOWLIST.split(",")
-            if email.strip()
-        }
+        return {email.strip().lower() for email in self.PAYLAP_POLICY_ALLOWLIST.split(",") if email.strip()}
 
 
 settings = Settings()

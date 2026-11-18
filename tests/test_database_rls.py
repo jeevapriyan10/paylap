@@ -1,9 +1,8 @@
 import pytest
 from sqlalchemy import create_engine, text
-from app.config import settings
-from app.db import org_session
+
 from app.ids import generate_id
-from app.models import TENANT_TABLES, Contract, Organization
+from app.models import TENANT_TABLES
 
 
 @pytest.fixture
@@ -69,11 +68,13 @@ def test_rls_isolation_and_zero_rows_without_org(pg_owner_engine, pg_app_engine)
     # 1. Seed two organizations and two contracts as owner
     with pg_owner_engine.begin() as conn:
         conn.execute(
-            text("INSERT INTO organizations (id, name, slug, live_enabled, arbiter_enabled, created_at, updated_at) VALUES (:id, :name, :slug, false, true, NOW(), NOW())"),
+            text(
+                "INSERT INTO organizations (id, name, slug, live_enabled, arbiter_enabled, created_at, updated_at) VALUES (:id, :name, :slug, false, true, NOW(), NOW())"
+            ),
             [
                 {"id": org_a_id, "name": "Org A", "slug": f"org-a-{org_a_id}"},
                 {"id": org_b_id, "name": "Org B", "slug": f"org-b-{org_b_id}"},
-            ]
+            ],
         )
         conn.execute(
             text("""
@@ -89,7 +90,7 @@ def test_rls_isolation_and_zero_rows_without_org(pg_owner_engine, pg_app_engine)
             [
                 {"id": ctr_a_id, "org_id": org_a_id, "title": "Contract A"},
                 {"id": ctr_b_id, "org_id": org_b_id, "title": "Contract B"},
-            ]
+            ],
         )
 
     # 2. Runtime role query WITHOUT setting app.current_org -> MUST RETURN ZERO ROWS
@@ -129,6 +130,6 @@ def test_rls_isolation_and_zero_rows_without_org(pg_owner_engine, pg_app_engine)
                             'simulated', false, false, 1000, 'USD', 'CREATED', 'partial', NOW(), NOW()
                         )
                     """),
-                    {"id": generate_id("ctr"), "org_id": org_b_id}
+                    {"id": generate_id("ctr"), "org_id": org_b_id},
                 )
             assert "violates row-level security policy" in str(exc_info.value).lower()

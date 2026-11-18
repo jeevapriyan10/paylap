@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.db import get_db
-from app.models import Organization, Policy
 from app.routers.auth import Principal, get_current_principal
 from app.services.policy import get_or_create_policy
 
@@ -80,5 +80,5 @@ def update_policy(
             "require_hidden_tests": policy.require_hidden_tests,
             "max_contract_days": policy.max_contract_days,
             "updated_at": policy.updated_at,
-        }
+        },
     }

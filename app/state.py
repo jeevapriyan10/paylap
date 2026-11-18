@@ -25,6 +25,7 @@ class MilestoneStatus(str, Enum):
 
 class InvalidStateTransitionError(Exception):
     """Raised when an illegal state machine transition is attempted."""
+
     pass
 
 
@@ -34,19 +35,19 @@ CONTRACT_TRANSITIONS = {
         ContractStatus.AWAITING_FUNDING,
         ContractStatus.FUNDED,
         ContractStatus.BLOCKED,
-        ContractStatus.ERROR
+        ContractStatus.ERROR,
     },
     ContractStatus.AWAITING_FUNDING: {
         ContractStatus.FUNDED,
         ContractStatus.CANCELLED,
         ContractStatus.EXPIRED,
-        ContractStatus.ERROR
+        ContractStatus.ERROR,
     },
     ContractStatus.FUNDED: {
         ContractStatus.COMPLETED,
         ContractStatus.VOIDED,
         ContractStatus.EXPIRED,
-        ContractStatus.ERROR
+        ContractStatus.ERROR,
     },
     ContractStatus.COMPLETED: {ContractStatus.ERROR},
     ContractStatus.VOIDED: {ContractStatus.ERROR},
@@ -63,7 +64,7 @@ MILESTONE_TRANSITIONS = {
     MilestoneStatus.VERIFYING: {
         MilestoneStatus.PAID,
         MilestoneStatus.VERIFIED_PENDING_SETTLEMENT,
-        MilestoneStatus.REJECTED
+        MilestoneStatus.REJECTED,
     },
     MilestoneStatus.VERIFIED_PENDING_SETTLEMENT: {MilestoneStatus.PAID},
     MilestoneStatus.REJECTED: {MilestoneStatus.PENDING, MilestoneStatus.SUBMITTED},
@@ -72,9 +73,7 @@ MILESTONE_TRANSITIONS = {
 
 
 def transition_contract(
-    current_status: str,
-    target_status: ContractStatus,
-    error_reason: Optional[str] = None
+    current_status: str, target_status: ContractStatus, error_reason: Optional[str] = None
 ) -> ContractStatus:
     """Validate and perform a state transition on a contract."""
     curr = ContractStatus(current_status)
@@ -85,21 +84,14 @@ def transition_contract(
 
     allowed = CONTRACT_TRANSITIONS.get(curr, set())
     if target_status not in allowed:
-        raise InvalidStateTransitionError(
-            f"Illegal contract transition from {curr.value} to {target_status.value}."
-        )
+        raise InvalidStateTransitionError(f"Illegal contract transition from {curr.value} to {target_status.value}.")
     return target_status
 
 
-def transition_milestone(
-    current_status: str,
-    target_status: MilestoneStatus
-) -> MilestoneStatus:
+def transition_milestone(current_status: str, target_status: MilestoneStatus) -> MilestoneStatus:
     """Validate and perform a state transition on a milestone."""
     curr = MilestoneStatus(current_status)
     allowed = MILESTONE_TRANSITIONS.get(curr, set())
     if target_status not in allowed:
-        raise InvalidStateTransitionError(
-            f"Illegal milestone transition from {curr.value} to {target_status.value}."
-        )
+        raise InvalidStateTransitionError(f"Illegal milestone transition from {curr.value} to {target_status.value}.")
     return target_status

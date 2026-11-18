@@ -2,9 +2,11 @@ import json
 import re
 import time
 from typing import Any
+
 import jsonschema
+
 from app.services.sandbox import run_json_hidden_tests
-from app.verifiers.base import VerifierBase, VerificationResult
+from app.verifiers.base import VerificationResult, VerifierBase
 
 
 class JsonDataVerifier(VerifierBase):
@@ -32,7 +34,7 @@ class JsonDataVerifier(VerifierBase):
                 checks=checks,
                 violations=[],
                 duration_ms=round(duration_ms, 2),
-                gate_type="deterministic"
+                gate_type="deterministic",
             )
 
         # 2. Validate against JSON Schema in verifier_config
@@ -52,7 +54,7 @@ class JsonDataVerifier(VerifierBase):
                     checks=checks,
                     violations=[],
                     duration_ms=round(duration_ms, 2),
-                    gate_type="deterministic"
+                    gate_type="deterministic",
                 )
 
         # 3. Optional hidden pytest checks
@@ -77,7 +79,7 @@ class JsonDataVerifier(VerifierBase):
                     checks=checks,
                     violations=[],
                     duration_ms=round(duration_ms, 2),
-                    gate_type="deterministic"
+                    gate_type="deterministic",
                 )
             else:
                 checks.append({"name": "hidden_checks", "passed": True})
@@ -90,5 +92,5 @@ class JsonDataVerifier(VerifierBase):
             checks=checks,
             violations=[],
             duration_ms=round(duration_ms, 2),
-            gate_type="deterministic"
+            gate_type="deterministic",
         )

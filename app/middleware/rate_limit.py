@@ -1,6 +1,7 @@
 import threading
 import time
-from typing import Dict, Tuple
+from typing import Awaitable, Callable, Dict, Tuple, cast
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -64,11 +65,11 @@ _global_limiter = RateLimiter()
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         # Exclude internal health and docs endpoints from rate limiting
         path = request.url.path
         if path in ("/healthz", "/readyz", "/docs", "/openapi.json", "/"):
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         # Check API key first, else fall back to IP address
         auth_header = request.headers.get("Authorization")
@@ -114,7 +115,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        response = await call_next(request)
+        response = cast(Response, await call_next(request))
         response.headers["X-RateLimit-Limit"] = str(capacity)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response

@@ -1,14 +1,14 @@
-import ast
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 import httpx
+
 from app.config import settings
 from app.services.sandbox import _build_scrubbed_env, _get_preexec_rlimits, _kill_process_tree, screen_code_ast
 
@@ -35,13 +35,7 @@ class RunnerResult:
 
 class CodeRunner(ABC):
     @abstractmethod
-    def run(
-        self,
-        code: str,
-        tests: str,
-        timeout_seconds: float = 8.0,
-        memory_mb: int = 256
-    ) -> RunnerResult:
+    def run(self, code: str, tests: str, timeout_seconds: float = 8.0, memory_mb: int = 256) -> RunnerResult:
         """Execute test suite against untrusted submission code."""
         pass
 
@@ -53,13 +47,7 @@ class ProcessRunner(CodeRunner):
     Default in development and test environments.
     """
 
-    def run(
-        self,
-        code: str,
-        tests: str,
-        timeout_seconds: float = 8.0,
-        memory_mb: int = 256
-    ) -> RunnerResult:
+    def run(self, code: str, tests: str, timeout_seconds: float = 8.0, memory_mb: int = 256) -> RunnerResult:
         # Production safety guard
         if settings.PAYLAP_ENV == "production" and not settings.PAYLAP_ALLOW_INSECURE_RUNNER:
             raise RuntimeError(
@@ -84,7 +72,8 @@ class ProcessRunner(CodeRunner):
         if not is_clean:
             return RunnerResult(
                 passed=False,
-                output="Security Policy Violation: Submission contained forbidden constructs:\n" + "\n".join(f"- {v}" for v in violations),
+                output="Security Policy Violation: Submission contained forbidden constructs:\n"
+                + "\n".join(f"- {v}" for v in violations),
                 duration_ms=0.0,
                 timed_out=False,
                 exit_code=1,
@@ -105,16 +94,7 @@ class ProcessRunner(CodeRunner):
             env = _build_scrubbed_env(temp_dir)
             preexec_fn, _ = _get_preexec_rlimits(memory_mb=memory_mb)
 
-            cmd = [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-p",
-                "no:cacheprovider",
-                "-q",
-                "--tb=short",
-                "test_solution.py"
-            ]
+            cmd = [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "--tb=short", "test_solution.py"]
 
             try:
                 proc = subprocess.Popen(
@@ -124,7 +104,7 @@ class ProcessRunner(CodeRunner):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    preexec_fn=preexec_fn
+                    preexec_fn=preexec_fn,
                 )
 
                 stdout, stderr = proc.communicate(timeout=timeout_seconds)
@@ -137,7 +117,7 @@ class ProcessRunner(CodeRunner):
                     duration_ms=round(duration_ms, 2),
                     timed_out=False,
                     exit_code=proc.returncode,
-                    violations=[]
+                    violations=[],
                 )
 
             except subprocess.TimeoutExpired:
@@ -153,7 +133,7 @@ class ProcessRunner(CodeRunner):
                     duration_ms=round(duration_ms, 2),
                     timed_out=True,
                     exit_code=-9,
-                    violations=["TIMEOUT_EXCEEDED"]
+                    violations=["TIMEOUT_EXCEEDED"],
                 )
 
             except Exception as exc:
@@ -164,7 +144,7 @@ class ProcessRunner(CodeRunner):
                     duration_ms=round(duration_ms, 2),
                     timed_out=False,
                     exit_code=1,
-                    violations=[]
+                    violations=[],
                 )
 
 
@@ -178,13 +158,7 @@ class RemoteRunner(CodeRunner):
         self.url = (url or settings.PAYLAP_RUNNER_URL).rstrip("/")
         self.token = token or settings.PAYLAP_RUNNER_TOKEN
 
-    def run(
-        self,
-        code: str,
-        tests: str,
-        timeout_seconds: float = 8.0,
-        memory_mb: int = 256
-    ) -> RunnerResult:
+    def run(self, code: str, tests: str, timeout_seconds: float = 8.0, memory_mb: int = 256) -> RunnerResult:
         if not self.url:
             raise RuntimeError("PAYLAP_RUNNER_URL must be configured when PAYLAP_RUNNER=remote")
 

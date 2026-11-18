@@ -1,7 +1,8 @@
 import re
 import time
 from typing import Any
-from app.verifiers.base import VerifierBase, VerificationResult
+
+from app.verifiers.base import VerificationResult, VerifierBase
 
 
 class TextRulesVerifier(VerifierBase):
@@ -25,7 +26,7 @@ class TextRulesVerifier(VerifierBase):
         # 1. min_words
         min_words = config.get("min_words")
         if min_words is not None:
-            passed = (word_count >= min_words)
+            passed = word_count >= min_words
             checks.append({"name": "min_words", "passed": passed, "expected": min_words, "actual": word_count})
             if not passed:
                 failed_reasons.append(f"Word count {word_count} is less than minimum {min_words}")
@@ -33,7 +34,7 @@ class TextRulesVerifier(VerifierBase):
         # 2. max_words
         max_words = config.get("max_words")
         if max_words is not None:
-            passed = (word_count <= max_words)
+            passed = word_count <= max_words
             checks.append({"name": "max_words", "passed": passed, "expected": max_words, "actual": word_count})
             if not passed:
                 failed_reasons.append(f"Word count {word_count} exceeds maximum {max_words}")
@@ -55,7 +56,7 @@ class TextRulesVerifier(VerifierBase):
                 failed_reasons.append(f"Forbidden pattern '{pattern}' was matched")
 
         duration_ms = (time.perf_counter() - start_time) * 1000.0
-        passed = (len(failed_reasons) == 0)
+        passed = len(failed_reasons) == 0
 
         if passed:
             summary = f"All {len(checks)} text verification rules passed successfully ({word_count} words)."
@@ -69,5 +70,5 @@ class TextRulesVerifier(VerifierBase):
             checks=checks,
             violations=[],
             duration_ms=round(duration_ms, 2),
-            gate_type="deterministic"
+            gate_type="deterministic",
         )

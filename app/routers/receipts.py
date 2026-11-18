@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
 from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
 from app.db import get_db
 from app.models import Contract, ShareToken
 from app.services.receipts import generate_receipt

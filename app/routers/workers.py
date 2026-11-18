@@ -1,7 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.auth import Principal, require_principal
 from app.db import get_db
 from app.models import Contract, Event, Milestone
@@ -30,9 +32,7 @@ def get_worker_stats(
     Get detailed statistics for a worker:
     total contracts, completion rate, avg attempts per milestone, dispute rate, masked email.
     """
-    contracts = db.scalars(
-        select(Contract).where(Contract.worker_id == worker_id)
-    ).all()
+    contracts = db.scalars(select(Contract).where(Contract.worker_id == worker_id)).all()
 
     if not contracts:
         raise HTTPException(status_code=404, detail=f"Worker '{worker_id}' not found")
@@ -46,9 +46,7 @@ def get_worker_stats(
     worker_masked_email = mask_email(raw_email)
 
     contract_ids = [c.id for c in contracts]
-    milestones = db.scalars(
-        select(Milestone).where(Milestone.contract_id.in_(contract_ids))
-    ).all()
+    milestones = db.scalars(select(Milestone).where(Milestone.contract_id.in_(contract_ids))).all()
 
     total_milestones = len(milestones)
     total_attempts = sum(m.attempts_count for m in milestones)

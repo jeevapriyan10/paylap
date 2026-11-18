@@ -14,7 +14,7 @@ class BuyerAgent:
         worker_id: str,
         worker_email: str = "worker@arena.ai",
         budget_usd: str = "5.00",
-        milestones: List[Dict[str, Any]] = None,
+        milestones: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         """Construct a contract creation payload for the specified arena scenario."""
         if milestones is None:

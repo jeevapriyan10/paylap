@@ -1,12 +1,14 @@
 import base64
 import hashlib
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.ids import generate_id
 from app.ledger import compute_event_hash
@@ -71,9 +73,7 @@ def generate_receipt(contract: Contract, db: Session) -> Dict[str, Any]:
     ]
 
     # Collect contract event trail
-    events = db.scalars(
-        select(Event).where(Event.contract_id == contract.id).order_by(Event.seq.asc())
-    ).all()
+    events = db.scalars(select(Event).where(Event.contract_id == contract.id).order_by(Event.seq.asc())).all()
 
     events_data = [
         {
@@ -89,21 +89,15 @@ def generate_receipt(contract: Contract, db: Session) -> Dict[str, Any]:
     ]
 
     chain_head_hash = (
-        events[-1].event_hash
-        if events
-        else hashlib.sha256(f"paylap:genesis:{contract.id}".encode("utf-8")).hexdigest()
+        events[-1].event_hash if events else hashlib.sha256(f"paylap:genesis:{contract.id}".encode("utf-8")).hexdigest()
     )
 
     completed_at = (
-        contract.updated_at.isoformat()
-        if contract.status in ("COMPLETED", "VOIDED") and contract.updated_at
-        else None
+        contract.updated_at.isoformat() if contract.status in ("COMPLETED", "VOIDED") and contract.updated_at else None
     )
 
     masked_worker_email = mask_email(contract.worker_email)
-    hidden_commitments = [
-        m.hidden_commitment_hash for m in contract.milestones if m.hidden_commitment_hash
-    ]
+    hidden_commitments = [m.hidden_commitment_hash for m in contract.milestones if m.hidden_commitment_hash]
 
     receipt_payload: Dict[str, Any] = {
         "receipt_id": generate_id("rcpt"),

@@ -1,27 +1,12 @@
 import time
+
 import pytest
-from fastapi.testclient import TestClient
-from app.arena import SCENARIOS, execute_scenario, run_arena
-from app.db import get_db
-from app.main import app
 
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+from app.arena import execute_scenario
 
 
 def test_arena_scenarios_listing(client):
-    res = client.get("/api/arena/scenarios")
+    res = client.get("/v1/arena/scenarios")
     assert res.status_code == 200
     scenarios = res.json()
     assert len(scenarios) == 6
@@ -36,7 +21,7 @@ def test_arena_individual_scenarios(client, scenario_key):
 
 
 def test_arena_full_run_endpoint(client):
-    res = client.post("/api/arena/run", json={"scenario": "all", "sync": True})
+    res = client.post("/v1/arena/run", json={"scenario": "all", "sync": True})
     assert res.status_code == 200
     data = res.json()
     assert data["scenarios_count"] == 6
@@ -47,7 +32,7 @@ def test_arena_full_run_endpoint(client):
 
 def test_arena_async_run_and_status(client):
     # Launch async run
-    res = client.post("/api/arena/run", json={"scenario": "honest", "sync": False})
+    res = client.post("/v1/arena/run", json={"scenario": "honest", "sync": False})
     assert res.status_code == 200
     data = res.json()
     run_id = data["run_id"]
@@ -57,7 +42,7 @@ def test_arena_async_run_and_status(client):
     completed = False
     for _ in range(30):
         time.sleep(0.5)
-        poll = client.get(f"/api/arena/runs/{run_id}")
+        poll = client.get(f"/v1/arena/runs/{run_id}")
         assert poll.status_code == 200
         poll_data = poll.json()
         if poll_data["status"] == "completed":

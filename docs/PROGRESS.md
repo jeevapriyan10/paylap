@@ -89,12 +89,12 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Aggregated platform statistics (`GET /v1/org/stats`) and worker reputation (`GET /v1/workers/{worker_id}/stats`)
   - [x] **Exit Gate**: Webhook signatures, retry schedule, SSRF protection, inbound deduplication, reconciliation discrepancy tests, and 6/6 playground runs pass. (Passed: 9/9 tests, 48/48 total)
 
-- [ ] **P8: OpenAPI, CLI, and CI/CD Automation**
-  - [ ] OpenAPI export script and schema verification
-  - [ ] CLI tools (`gen-master-key`, `create-user`, `migrate-check`, `seed-dev`, `reconcile`, `expire-now`)
-  - [ ] GitHub Actions workflow (linting, mypy, pytest coverage >= 80%, bandit, pip-audit, gitleaks)
-  - [ ] Pre-commit configuration and Dependabot
-  - [ ] **Exit Gate**: Full test suite passes with >= 80% coverage; all linters and security scanners clean.
+- [x] **P8: OpenAPI, CLI, and CI/CD Automation**
+  - [x] OpenAPI export script and schema verification (`scripts/export_openapi.py` exporting to `docs/openapi.json`)
+  - [x] Typer CLI tools in `app/cli.py` (`gen-master-key`, `create-user`, `migrate-check`, `seed-dev`, `rotate-master-key`, `reconcile`, `expire-now`)
+  - [x] GitHub Actions workflow `.github/workflows/ci.yml` (ruff lint/format, mypy typecheck, pytest coverage >= 80% with PostgreSQL service container, bandit, pip-audit, gitleaks)
+  - [x] Pre-commit configuration (`.pre-commit-config.yaml`) and Dependabot (`.github/dependabot.yml`)
+  - [x] **Exit Gate**: Full test suite passes (142/142 tests passing) with 80% code coverage; ruff, mypy, bandit clean; CLI commands functional.
 
 - [ ] **P9: Production Frontend (React + TypeScript + Vite)**
   - [ ] Web application with minimal, calm aesthetic and zero Tailwind / UI kits

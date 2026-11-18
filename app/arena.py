@@ -1,14 +1,13 @@
 import time
 import uuid
 from typing import Any, Dict, List, Optional
+
 from fastapi.testclient import TestClient
+
 from app.agents.buyer_agent import BuyerAgent
 from app.agents.worker_agent import WorkerAgent
-from app.config import settings
 from app.db import SessionLocal
 from app.ledger import verify_chain
-from app.models import Contract, Event
-from app.state import ContractStatus, MilestoneStatus
 
 SCENARIOS: Dict[str, Dict[str, Any]] = {
     "honest": {
@@ -83,6 +82,7 @@ RUNS: Dict[str, Dict[str, Any]] = {}
 
 def get_client() -> TestClient:
     from app.main import app
+
     return TestClient(app)
 
 
@@ -108,15 +108,12 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
     )
 
     t0 = time.time()
-    res_create = client.post("/api/contracts", json=contract_payload)
+    res_create = client.post("/v1/contracts", json=contract_payload)
 
     # Handle overspender scenario (expected 422 BLOCKED at creation)
     if scenario_key == "overspender":
         elapsed_ms = int((time.time() - t0) * 1000)
-        passed = (
-            res_create.status_code == 422
-            and "Policy violation" in res_create.text
-        )
+        passed = res_create.status_code == 422 and "Policy violation" in res_create.text
         data = res_create.json()
         contract_id = data.get("contract_id")
 
@@ -157,7 +154,7 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
     milestone_outcome = None
     for attempt_num in range(1, max_attempts + 1):
         res_submit = client.post(
-            f"/api/contracts/{contract_id}/milestones/1/submit",
+            f"/v1/contracts/{contract_id}/milestones/1/submit",
             json={"code": code_submission},
         )
         last_submit_res = res_submit
@@ -169,17 +166,14 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
     elapsed_ms = int((time.time() - t0) * 1000)
 
     # Fetch final contract state
-    res_final = client.get(f"/api/contracts/{contract_id}")
+    res_final = client.get(f"/v1/contracts/{contract_id}")
     final_data = res_final.json()
     final_contract = final_data.get("contract", final_data)
     final_status = final_contract.get("status")
     final_m1_status = final_contract["milestones"][0].get("status")
 
     # Evaluate whether defense held as expected
-    passed = (
-        final_status == scen["expected_contract_status"]
-        and final_m1_status == scen["expected_milestone_status"]
-    )
+    passed = final_status == scen["expected_contract_status"] and final_m1_status == scen["expected_milestone_status"]
 
     actual_outcome = "PASS" if final_status == "COMPLETED" else "REJECTED"
     if scenario_key in ("malicious", "injector"):
@@ -199,10 +193,7 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
     }
 
 
-def run_arena(
-    scenarios: Optional[List[str]] = None,
-    client: Optional[TestClient] = None
-) -> Dict[str, Any]:
+def run_arena(scenarios: Optional[List[str]] = None, client: Optional[TestClient] = None) -> Dict[str, Any]:
     """Run specified scenarios (or all 6) and return summary with ledger chain integrity check."""
     run_id = f"run_{uuid.uuid4().hex[:12]}"
     if not scenarios:
@@ -217,10 +208,19 @@ def run_arena(
         if not res.get("passed"):
             all_passed = False
 
-    # Verify ledger integrity
+    # Verify ledger integrity per created contract
     db = SessionLocal()
+    ledger_valid = True
+    err = None
     try:
-        ledger_valid, err, broken_seq = verify_chain(db)
+        for r in results:
+            cid = r.get("contract_id")
+            if cid:
+                v, e_msg, _ = verify_chain(db, contract_id=cid)
+                if not v:
+                    ledger_valid = False
+                    err = e_msg
+                    break
     finally:
         db.close()
 

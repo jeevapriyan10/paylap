@@ -2,9 +2,11 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
-from fastapi import HTTPException, Response, status
+
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.ids import generate_id
 from app.models import IdempotencyKey
 

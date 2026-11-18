@@ -1,5 +1,6 @@
 import pytest
-from app.schemas import cents_to_usd_str, usd_str_to_cents, ContractCreate, MilestoneCreate
+
+from app.schemas import ContractCreate, MilestoneCreate, cents_to_usd_str, usd_str_to_cents
 
 
 def test_cents_to_usd_str():
@@ -83,15 +84,27 @@ def test_contract_milestones_validation():
 
 def test_contract_rejects_invalid_milestone_counts():
     from unittest.mock import MagicMock
+
+    from app.models import Policy
     from app.services.policy import validate_spend_policy
 
     db = MagicMock()
+    mock_policy = Policy(
+        max_task_cents=2500,
+        daily_cap_cents=10000,
+        max_milestones=5,
+        worker_allowlist=None,
+        require_hidden_tests=False,
+        max_contract_days=28,
+    )
+    db.scalar.side_effect = [mock_policy, 0, mock_policy, 0]
+
     # 0 milestones
     ok, violations = validate_spend_policy(db, "b", "w@example.com", 100, 0)
     assert ok is False
-    assert any("violates policy (must be 1 to 3)" in v for v in violations)
+    assert any("violates policy" in v for v in violations)
 
-    # 4 milestones (max allowed is 3)
-    ok, violations = validate_spend_policy(db, "b", "w@example.com", 100, 4)
+    # 6 milestones (max allowed is 5)
+    ok, violations = validate_spend_policy(db, "b", "w@example.com", 100, 6)
     assert ok is False
-    assert any("violates policy (must be 1 to 3)" in v for v in violations)
+    assert any("violates policy" in v for v in violations)

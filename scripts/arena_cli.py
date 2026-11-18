@@ -15,7 +15,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import httpx
-from app.arena import SCENARIOS, run_arena
+
+from app.arena import run_arena
 
 
 def format_table(rows: list, headers: list) -> str:
@@ -26,22 +27,37 @@ def format_table(rows: list, headers: list) -> str:
 
     header_line = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
     separator = "-+-".join("-" * col_widths[i] for i in range(len(headers)))
-    row_lines = [
-        " | ".join(str(val).ljust(col_widths[i]) for i, val in enumerate(row))
-        for row in rows
-    ]
+    row_lines = [" | ".join(str(val).ljust(col_widths[i]) for i, val in enumerate(row)) for row in rows]
     return f"\n{header_line}\n{separator}\n" + "\n".join(row_lines) + "\n"
 
 
 def main():
     parser = argparse.ArgumentParser(description="PayLap Red Team Arena CLI")
-    parser.add_argument("--scenario", "-s", default="all", help="Scenario to run: honest, buggy, cheater, malicious, injector, overspender, all")
-    parser.add_argument("--url", "-u", default=None, help="PayLap base URL if testing remote/running server (e.g. http://localhost:8000)")
-    parser.add_argument("--worker-source", default="canned", choices=["canned", "gemini", "auto"], help="Source for worker code submissions")
-    parser.add_argument("--arbiter-mode", default="mock", choices=["mock", "gemini", "auto", "off"], help="Arbiter execution mode")
+    parser.add_argument(
+        "--scenario",
+        "-s",
+        default="all",
+        help="Scenario to run: honest, buggy, cheater, malicious, injector, overspender, all",
+    )
+    parser.add_argument(
+        "--url",
+        "-u",
+        default=None,
+        help="PayLap base URL if testing remote/running server (e.g. http://localhost:8000)",
+    )
+    parser.add_argument(
+        "--worker-source",
+        default="canned",
+        choices=["canned", "gemini", "auto"],
+        help="Source for worker code submissions",
+    )
+    parser.add_argument(
+        "--arbiter-mode", default="mock", choices=["mock", "gemini", "auto", "off"], help="Arbiter execution mode"
+    )
     args = parser.parse_args()
 
     from app.config import settings
+
     settings.ARENA_WORKER_SOURCE = args.worker_source
     settings.PAYLAP_ARBITER_MODE = args.arbiter_mode
 
@@ -73,14 +89,16 @@ def main():
     rows = []
     for s in data["scenarios"]:
         defense_status = "PASS (OK)" if s.get("passed") else "FAIL (BREACH)"
-        rows.append([
-            s.get("scenario"),
-            s.get("title", ""),
-            s.get("expected_outcome", ""),
-            s.get("actual_outcome", ""),
-            defense_status,
-            f"{s.get('elapsed_ms', 0)}ms",
-        ])
+        rows.append(
+            [
+                s.get("scenario"),
+                s.get("title", ""),
+                s.get("expected_outcome", ""),
+                s.get("actual_outcome", ""),
+                defense_status,
+                f"{s.get('elapsed_ms', 0)}ms",
+            ]
+        )
 
     print(format_table(rows, headers))
 

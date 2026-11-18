@@ -1,6 +1,8 @@
 import json
+
 import httpx
 import pytest
+
 from app.services.paypal_base import PayPalError
 from app.services.paypal_client import PayPalClient
 from app.services.paypal_fake import FakePayPal
@@ -111,15 +113,7 @@ def test_authorize_order_success():
                 json={
                     "id": "ORD-123",
                     "status": "COMPLETED",
-                    "purchase_units": [
-                        {
-                            "payments": {
-                                "authorizations": [
-                                    {"id": "AUTH-789", "status": "CREATED"}
-                                ]
-                            }
-                        }
-                    ],
+                    "purchase_units": [{"payments": {"authorizations": [{"id": "AUTH-789", "status": "CREATED"}]}}],
                 },
             )
         return httpx.Response(404)

@@ -1,12 +1,13 @@
 from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.db import get_db
 from app.ledger import verify_chain
 from app.models import Event
 from app.schemas import HealthResponse
-
 from app.verifiers import list_available_verifiers
 
 router = APIRouter(prefix="/v1/system", tags=["System"])
@@ -32,9 +33,14 @@ def health_check(db: Session = Depends(get_db)):
 
 @router.get("/policy")
 def get_policy_endpoint() -> Dict[str, Any]:
-    """Get active spend policy limits and masked allowlist."""
-    from app.services.policy import get_policy_summary
-    return get_policy_summary()
+    """Get default spend policy limits."""
+    return {
+        "max_task_cents": 2500,
+        "daily_cap_cents": 10000,
+        "max_milestones": 5,
+        "require_hidden_tests": True,
+        "max_contract_days": 28,
+    }
 
 
 @router.get("/ledger/verify")
@@ -50,9 +56,7 @@ def verify_ledger_endpoint(db: Session = Depends(get_db)) -> Dict[str, Any]:
 
 @router.get("/events")
 def list_events(
-    limit: int = Query(50, ge=1, le=500),
-    contract_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    limit: int = Query(50, ge=1, le=500), contract_id: Optional[str] = None, db: Session = Depends(get_db)
 ) -> List[Dict[str, Any]]:
     """Query recent immutable ledger events."""
     query = db.query(Event)
@@ -78,11 +82,12 @@ def list_events(
 
 
 @router.post("/receipts/verify")
-def verify_receipt_endpoint(
-    payload: Dict[str, Any],
-    db: Session = Depends(get_db)
-) -> Dict[str, Any]:
+def verify_receipt_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Cryptographically verify a PayLap receipt."""
     from app.services.receipts import verify_receipt
-    return verify_receipt(payload, db=db)
 
+    is_valid, error_msg = verify_receipt(payload)
+    return {
+        "valid": is_valid,
+        "error": error_msg,
+    }

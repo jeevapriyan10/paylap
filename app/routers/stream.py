@@ -2,10 +2,12 @@ import asyncio
 import json
 import time
 from typing import AsyncGenerator, Optional
+
 from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
 from app.auth import Principal, require_principal
 from app.db import get_db
 from app.models import Event
@@ -75,9 +77,7 @@ async def event_stream_generator(
                 }
 
                 sse_chunk = (
-                    f"id: {event.seq}\n"
-                    f"event: {event.event_type}\n"
-                    f"data: {json.dumps(event_dict, sort_keys=True)}\n\n"
+                    f"id: {event.seq}\nevent: {event.event_type}\ndata: {json.dumps(event_dict, sort_keys=True)}\n\n"
                 )
                 yield sse_chunk
                 delivered += 1

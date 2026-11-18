@@ -1,8 +1,10 @@
 import io
 import json
 import logging
+
 import pytest
 from fastapi.testclient import TestClient
+
 from app.logging_conf import (
     RedactingJsonFormatter,
     register_hidden_test_sentinel,
@@ -31,7 +33,7 @@ def test_standard_error_format_404_and_request_id(client):
     assert "message" in err
     # Assert zero stack traces in response
     assert "Traceback" not in res.text
-    assert "File \"" not in res.text
+    assert 'File "' not in res.text
 
 
 def test_security_headers(client):

@@ -1,16 +1,18 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.db import get_db
 from app.ids import generate_id
 from app.ledger import append_event
-from app.models import Contract, Milestone, Event, Organization, ShareToken
+from app.models import Contract, Event, Milestone, Organization, ShareToken
 from app.routers.auth import Principal, get_current_principal
 from app.schemas import (
     ContractCreate,
@@ -111,7 +113,7 @@ def create_contract(
     payload: ContractCreate,
     principal: Principal = Depends(get_current_principal),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Create a new milestone contract and initialize PayPal escrow order.
@@ -151,7 +153,9 @@ def create_contract(
     now = datetime.now(timezone.utc)
     contract_days = None
     if payload.deadline_at:
-        deadline = payload.deadline_at if payload.deadline_at.tzinfo else payload.deadline_at.replace(tzinfo=timezone.utc)
+        deadline = (
+            payload.deadline_at if payload.deadline_at.tzinfo else payload.deadline_at.replace(tzinfo=timezone.utc)
+        )
         if deadline <= now:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -166,10 +170,10 @@ def create_contract(
         contract_days = (deadline - now).days
 
     contract_id = generate_id("ctr")
-    is_simulated = (payload.environment == "simulated")
+    is_simulated = payload.environment == "simulated"
 
     # Compute amounts
-    milestone_cents = [m.amount_minor for m in payload.milestones]
+    milestone_cents = [(m.amount_minor or 0) for m in payload.milestones]
     total_cents = sum(milestone_cents)
 
     # Hidden test commitment hashes (stored internally, never returned in responses)
@@ -184,7 +188,8 @@ def create_contract(
 
     overall_h_commit = (
         hashlib.sha256("".join(c for c in hidden_commitments if c).encode("utf-8")).hexdigest()
-        if any(hidden_commitments) else None
+        if any(hidden_commitments)
+        else None
     )
 
     # Spend policy evaluation
@@ -267,7 +272,9 @@ def create_contract(
     db.add(contract)
 
     # Add milestones
-    for idx, (m_spec, cents, h_commit) in enumerate(zip(payload.milestones, milestone_cents, hidden_commitments), start=1):
+    for idx, (m_spec, cents, h_commit) in enumerate(
+        zip(payload.milestones, milestone_cents, hidden_commitments), start=1
+    ):
         milestone = Milestone(
             id=generate_id("mst"),
             org_id=principal.org_id,
@@ -310,6 +317,8 @@ def create_contract(
 
     # Resolve provider
     org = db.scalar(select(Organization).where(Organization.id == principal.org_id))
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
     provider = get_provider(org, payload.environment, db)
 
     if payload.environment == "simulated":
@@ -331,7 +340,7 @@ def create_contract(
             simulated=True,
         )
 
-        auth_res = provider.authorize_order(order_id=contract.paypal_order_id)
+        auth_res = provider.authorize_order(order_id=contract.paypal_order_id or "")
         contract.paypal_authorization_id = auth_res.get("authorization_id")
 
         append_event(
@@ -450,8 +459,7 @@ def list_contracts(
         cursor_dt, cursor_id = decode_cursor(cursor)
         if cursor_dt and cursor_id:
             stmt = stmt.where(
-                (Contract.created_at < cursor_dt) |
-                ((Contract.created_at == cursor_dt) & (Contract.id < cursor_id))
+                (Contract.created_at < cursor_dt) | ((Contract.created_at == cursor_dt) & (Contract.id < cursor_id))
             )
 
     stmt = stmt.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(limit + 1)
@@ -485,9 +493,7 @@ def get_contract_detail(
     principal.require_scope("contracts:read")
     set_tenant_org(db, principal.org_id)
 
-    contract = db.scalar(
-        select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id)
-    )
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id))
     if not contract:
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
@@ -553,6 +559,8 @@ def funding_return_callback(
         raise HTTPException(status_code=400, detail="Missing order ID token.")
 
     org = db.scalar(select(Organization).where(Organization.id == org_id))
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
     provider = get_provider(org, contract.environment, db)
 
     try:
@@ -560,7 +568,9 @@ def funding_return_callback(
         contract.paypal_authorization_id = auth_res.get("authorization_id")
         if auth_res.get("expiration_time"):
             try:
-                contract.authorization_expires_at = datetime.fromisoformat(auth_res["expiration_time"].replace("Z", "+00:00"))
+                contract.authorization_expires_at = datetime.fromisoformat(
+                    auth_res["expiration_time"].replace("Z", "+00:00")
+                )
             except Exception:
                 pass
 
@@ -605,7 +615,7 @@ def funding_return_callback(
                 <p>Error authorizing PayPal payment hold: {exc}</p>
               </body>
             </html>
-            """
+            """,
         )
 
     return HTMLResponse(
@@ -671,7 +681,7 @@ def submit_milestone(
     payload: MilestoneSubmit,
     principal: Principal = Depends(get_current_principal),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Submit work for a milestone.
@@ -700,12 +710,7 @@ def submit_milestone(
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
     try:
-        outcome = settle_milestone(
-            db=db,
-            contract_id=contract_id,
-            milestone_idx=idx,
-            code=payload.code
-        )
+        outcome = settle_milestone(db=db, contract_id=contract_id, milestone_idx=idx, code=payload.code)
 
         if idempotency_key:
             store_idempotency_key(
@@ -733,7 +738,7 @@ def cancel_contract(
     contract_id: str,
     principal: Principal = Depends(get_current_principal),
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Buyer cancellation: voids remaining hold if funded, or marks cancelled if awaiting funding.
@@ -759,15 +764,16 @@ def cancel_contract(
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
     org = db.scalar(select(Organization).where(Organization.id == principal.org_id))
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
     provider = get_provider(org, contract.environment, db)
-    is_simulated = (contract.environment == "simulated")
+    is_simulated = contract.environment == "simulated"
 
     if contract.status == ContractStatus.FUNDED.value:
         if contract.paypal_authorization_id:
             try:
                 provider.void_authorization(
-                    authorization_id=contract.paypal_authorization_id,
-                    request_id=f"buyer-void-{contract.id}"
+                    authorization_id=contract.paypal_authorization_id, request_id=f"buyer-void-{contract.id}"
                 )
                 append_event(
                     db,
@@ -775,7 +781,7 @@ def cancel_contract(
                     payload={"authorization_id": contract.paypal_authorization_id, "reason": "Buyer cancellation"},
                     contract_id=contract.id,
                     org_id=principal.org_id,
-                    simulated=is_simulated
+                    simulated=is_simulated,
                 )
             except Exception as exc:
                 append_event(
@@ -784,7 +790,7 @@ def cancel_contract(
                     payload={"error": str(exc)},
                     contract_id=contract.id,
                     org_id=principal.org_id,
-                    simulated=is_simulated
+                    simulated=is_simulated,
                 )
 
         transition_contract(contract.status, ContractStatus.VOIDED)
@@ -795,7 +801,7 @@ def cancel_contract(
             payload={"reason": "Cancelled by buyer."},
             contract_id=contract.id,
             org_id=principal.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
     elif contract.status == ContractStatus.AWAITING_FUNDING.value:
@@ -807,13 +813,10 @@ def cancel_contract(
             payload={"reason": "Cancelled by buyer before funding."},
             contract_id=contract.id,
             org_id=principal.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
     else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel contract in status '{contract.status}'."
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot cancel contract in status '{contract.status}'.")
 
     db.commit()
     db.refresh(contract)
@@ -836,9 +839,7 @@ def cancel_contract(
 
 @router.get("/{contract_id}/receipt")
 def get_contract_receipt(
-    contract_id: str,
-    principal: Principal = Depends(get_current_principal),
-    db: Session = Depends(get_db)
+    contract_id: str, principal: Principal = Depends(get_current_principal), db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Generate and return a signed, tamper-evident cryptographic receipt for the contract."""
     from app.services.receipts import generate_receipt

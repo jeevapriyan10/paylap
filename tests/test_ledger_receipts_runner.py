@@ -4,21 +4,22 @@ import os
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
-from app.config import settings
+
 from app.db import get_db
 from app.ids import generate_id
 from app.ledger import append_event, append_org_audit_log, verify_chain, verify_org_audit_chain
 from app.main import app
-from app.models import ApiKey, Contract, Event, Membership, Milestone, OrgAuditLog, Organization, ShareToken, User
+from app.models import ApiKey, Contract, Event, Membership, Milestone, Organization, OrgAuditLog, User
 from app.routers.auth import Principal, get_current_principal
 from app.services.auth import generate_api_key, hash_password
 from app.services.receipts import generate_receipt, verify_receipt
-from app.services.runner import ProcessRunner, RunnerResult
+from app.services.runner import ProcessRunner
 
 TEST_PG_URL = "postgresql+psycopg://paylap_owner:paylap_owner_pass@localhost:5432/paylap_test"
 test_engine = create_engine(TEST_PG_URL, pool_pre_ping=True)
@@ -161,9 +162,7 @@ def test_50_concurrent_appends_produce_gapless_chain(db_session, auth_org):
     assert is_valid is True, f"Chain broken: {err} at seq {broken_seq}"
 
     # Verify exactly 50 events, sequence 1 through 50 with no gaps
-    events = db_session.scalars(
-        select(Event).where(Event.contract_id == contract_id).order_by(Event.seq.asc())
-    ).all()
+    events = db_session.scalars(select(Event).where(Event.contract_id == contract_id).order_by(Event.seq.asc())).all()
 
     assert len(events) == 50
     assert [e.seq for e in events] == list(range(1, 51))
@@ -199,9 +198,7 @@ def test_tampering_with_historical_event_is_detected(db_session, auth_org):
     assert is_valid is True
 
     # Tamper with event seq 2 payload
-    evt2 = db_session.scalar(
-        select(Event).where(Event.contract_id == contract_id, Event.seq == 2)
-    )
+    evt2 = db_session.scalar(select(Event).where(Event.contract_id == contract_id, Event.seq == 2))
     evt2.payload = {"msg": "TAMPERED_DATA"}
     db_session.commit()
 
@@ -267,7 +264,7 @@ def test_ed25519_receipt_generation_and_offline_verification(db_session, auth_or
         spec="Specification",
         public_tests="def test_pass(): pass\n",
         hidden_tests="def test_hidden(): pass\n",
-        hidden_commitment_hash="a"*64,
+        hidden_commitment_hash="a" * 64,
         status="PAID",
         attempts_count=1,
         paid_at=datetime.now(timezone.utc),
@@ -275,9 +272,15 @@ def test_ed25519_receipt_generation_and_offline_verification(db_session, auth_or
     db_session.add(milestone)
     db_session.commit()
 
-    append_event(db_session, "CONTRACT_CREATED", {"title": contract.title}, contract_id=contract_id, org_id=auth_org["org_id"])
-    append_event(db_session, "CONTRACT_FUNDED", {"auth_id": "AUTH-1"}, contract_id=contract_id, org_id=auth_org["org_id"])
-    append_event(db_session, "MILESTONE_PAID", {"amount_cents": 450}, contract_id=contract_id, org_id=auth_org["org_id"])
+    append_event(
+        db_session, "CONTRACT_CREATED", {"title": contract.title}, contract_id=contract_id, org_id=auth_org["org_id"]
+    )
+    append_event(
+        db_session, "CONTRACT_FUNDED", {"auth_id": "AUTH-1"}, contract_id=contract_id, org_id=auth_org["org_id"]
+    )
+    append_event(
+        db_session, "MILESTONE_PAID", {"amount_cents": 450}, contract_id=contract_id, org_id=auth_org["org_id"]
+    )
     db_session.commit()
 
     # Generate receipt v2
@@ -298,12 +301,7 @@ def test_ed25519_receipt_generation_and_offline_verification(db_session, auth_or
         script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts", "verify_receipt.py")
 
         # 1. Genuine receipt verification succeeds
-        proc = subprocess.run(
-            [sys.executable, script_path, temp_path],
-            capture_output=True,
-            text=True,
-            check=False
-        )
+        proc = subprocess.run([sys.executable, script_path, temp_path], capture_output=True, text=True, check=False)
         assert proc.returncode == 0, f"verify_receipt.py failed: {proc.stderr}"
         assert "PayLap Cryptographic Receipt Verification: SUCCESS" in proc.stdout
         assert "Ed25519 Verified OK" in proc.stdout
@@ -315,10 +313,7 @@ def test_ed25519_receipt_generation_and_offline_verification(db_session, auth_or
             json.dump(tampered_receipt, f)
 
         proc_tampered = subprocess.run(
-            [sys.executable, script_path, temp_path],
-            capture_output=True,
-            text=True,
-            check=False
+            [sys.executable, script_path, temp_path], capture_output=True, text=True, check=False
         )
         assert proc_tampered.returncode != 0
         assert "FAILED" in proc_tampered.stderr
@@ -347,7 +342,9 @@ def test_share_token_and_public_receipt_endpoint(client, db_session, auth_org):
     db_session.add(contract)
     db_session.commit()
 
-    append_event(db_session, "CONTRACT_CREATED", {"title": contract.title}, contract_id=contract_id, org_id=auth_org["org_id"])
+    append_event(
+        db_session, "CONTRACT_CREATED", {"title": contract.title}, contract_id=contract_id, org_id=auth_org["org_id"]
+    )
     db_session.commit()
 
     # 1. Create share token (authenticated)
@@ -400,4 +397,3 @@ def test_runner_refuses_dangerous_code_and_times_out():
     assert res_timeout.passed is False
     assert res_timeout.timed_out is True
     assert "timed out" in res_timeout.output.lower()
-

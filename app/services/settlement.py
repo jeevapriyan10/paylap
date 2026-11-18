@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import func, select
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.ledger import append_event
 from app.models import Contract, Milestone, Organization, utc_now
@@ -9,12 +11,12 @@ from app.schemas import MilestoneOutcome
 from app.services.arbiter import review_submission
 from app.services.injection_scan import scan_for_injections
 from app.services.paypal_base import PayPalBase, PayPalError
-from app.services.paypal_fake import FakePayPal
 from app.services.paypal_factory import get_provider
+from app.services.paypal_fake import FakePayPal
 from app.state import (
     ContractStatus,
-    MilestoneStatus,
     InvalidStateTransitionError,
+    MilestoneStatus,
     transition_contract,
     transition_milestone,
 )
@@ -32,12 +34,7 @@ def _get_contract_provider(db: Session, contract: Contract, custom_provider: Opt
     return get_provider(org, contract.environment, db)
 
 
-def _execute_batch_capture_and_payouts(
-    db: Session,
-    contract: Contract,
-    provider: PayPalBase,
-    is_simulated: bool
-):
+def _execute_batch_capture_and_payouts(db: Session, contract: Contract, provider: PayPalBase, is_simulated: bool):
     """
     Executes a single batch capture for all verified milestones,
     then dispatches individual payouts per verified milestone.
@@ -46,8 +43,7 @@ def _execute_batch_capture_and_payouts(
     to_settle = (
         db.query(Milestone)
         .filter(
-            Milestone.contract_id == contract.id,
-            Milestone.status == MilestoneStatus.VERIFIED_PENDING_SETTLEMENT.value
+            Milestone.contract_id == contract.id, Milestone.status == MilestoneStatus.VERIFIED_PENDING_SETTLEMENT.value
         )
         .order_by(Milestone.sequence.asc())
         .all()
@@ -64,7 +60,7 @@ def _execute_batch_capture_and_payouts(
         authorization_id=contract.paypal_authorization_id or f"DEMO-AUTH-{contract.id}",
         amount_cents=total_batch_cents,
         final_capture=True,
-        request_id=cap_req_id
+        request_id=cap_req_id,
     )
     append_event(
         db,
@@ -74,11 +70,11 @@ def _execute_batch_capture_and_payouts(
             "total_cents": total_batch_cents,
             "capture_id": cap_res.get("capture_id"),
             "request_id": cap_req_id,
-            "milestone_indices": [m.sequence for m in to_settle]
+            "milestone_indices": [m.sequence for m in to_settle],
         },
         contract_id=contract.id,
         org_id=contract.org_id,
-        simulated=cap_res.get("simulated", is_simulated)
+        simulated=cap_res.get("simulated", is_simulated),
     )
 
     # 2. Dispatch payout per milestone
@@ -88,7 +84,7 @@ def _execute_batch_capture_and_payouts(
             recipient_email=contract.worker_email,
             amount_cents=m.amount_cents,
             request_id=p_req_id,
-            note=f"Payment for milestone {m.sequence}: {m.title}"
+            note=f"Payment for milestone {m.sequence}: {m.title}",
         )
         append_event(
             db,
@@ -102,7 +98,7 @@ def _execute_batch_capture_and_payouts(
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
         m.capture_id = cap_res.get("capture_id")
@@ -123,17 +119,11 @@ def _execute_batch_capture_and_payouts(
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
 
-def _handle_void_fallback(
-    db: Session,
-    contract: Contract,
-    provider: PayPalBase,
-    void_req_id: str,
-    is_simulated: bool
-):
+def _handle_void_fallback(db: Session, contract: Contract, provider: PayPalBase, void_req_id: str, is_simulated: bool):
     """
     Attempts to void authorization. If PayPal fails after partial captures,
     records error event with debug_id and notes that remainder expires at authorization expiry.
@@ -142,20 +132,14 @@ def _handle_void_fallback(
         return
 
     try:
-        provider.void_authorization(
-            authorization_id=contract.paypal_authorization_id,
-            request_id=void_req_id
-        )
+        provider.void_authorization(authorization_id=contract.paypal_authorization_id, request_id=void_req_id)
         append_event(
             db,
             event_type="AUTHORIZATION_VOIDED",
-            payload={
-                "authorization_id": contract.paypal_authorization_id,
-                "request_id": void_req_id
-            },
+            payload={"authorization_id": contract.paypal_authorization_id, "request_id": void_req_id},
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
     except Exception as void_err:
         debug_id = getattr(void_err, "debug_id", None)
@@ -166,20 +150,16 @@ def _handle_void_fallback(
                 "authorization_id": contract.paypal_authorization_id,
                 "error": str(void_err),
                 "debug_id": debug_id,
-                "note": "Authorization voiding rejected or unsupported after captures; remainder will be released at authorization expiry."
+                "note": "Authorization voiding rejected or unsupported after captures; remainder will be released at authorization expiry.",
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
 
 def settle_milestone(
-    db: Session,
-    contract_id: str,
-    milestone_idx: int,
-    code: str,
-    custom_provider: Optional[PayPalBase] = None
+    db: Session, contract_id: str, milestone_idx: int, code: str, custom_provider: Optional[PayPalBase] = None
 ) -> MilestoneOutcome:
     """
     Orchestrates milestone submission:
@@ -190,22 +170,19 @@ def settle_milestone(
     5. Settlement: partial capture or batch_at_end strategy.
     """
     # Concurrency lock on contract and milestone rows
-    contract = db.scalar(
-        select(Contract).where(Contract.id == contract_id).with_for_update()
-    )
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id).with_for_update())
     if not contract:
         raise ValueError(f"Contract '{contract_id}' not found.")
 
     milestone = db.scalar(
-        select(Milestone).where(
-            Milestone.contract_id == contract_id,
-            Milestone.sequence == milestone_idx
-        ).with_for_update()
+        select(Milestone)
+        .where(Milestone.contract_id == contract_id, Milestone.sequence == milestone_idx)
+        .with_for_update()
     )
     if not milestone:
         raise ValueError(f"Milestone {milestone_idx} for contract '{contract_id}' not found.")
 
-    is_simulated = (contract.environment == "simulated")
+    is_simulated = contract.environment == "simulated"
     provider = _get_contract_provider(db, contract, custom_provider)
 
     # Idempotency check: If already paid, return recorded outcome without double-paying
@@ -220,7 +197,7 @@ def settle_milestone(
             payout_batch_id=milestone.payout_batch_id,
             payout_status=milestone.payout_status,
             simulated=is_simulated,
-            gate_decided="idempotent"
+            gate_decided="idempotent",
         )
 
     # Contract must be FUNDED
@@ -232,16 +209,21 @@ def settle_milestone(
     # Contract deadline expiry check
     now = datetime.now(timezone.utc)
     if contract.deadline_at:
-        deadline_tz = contract.deadline_at if contract.deadline_at.tzinfo else contract.deadline_at.replace(tzinfo=timezone.utc)
+        deadline_tz = (
+            contract.deadline_at if contract.deadline_at.tzinfo else contract.deadline_at.replace(tzinfo=timezone.utc)
+        )
         if now >= deadline_tz:
             from app.services.expiry import expire_due_contracts
+
             expire_due_contracts(db)
             raise InvalidStateTransitionError(
                 f"Contract '{contract_id}' deadline expired at {contract.deadline_at.isoformat()}. Submissions closed."
             )
 
     # Check if attempts exhausted
-    effective_max_attempts = contract.metadata_json.get("max_attempts", 2) if contract.metadata_json else 2
+    effective_max_attempts = getattr(milestone, "max_attempts", None) or (
+        contract.metadata_json.get("max_attempts", 2) if contract.metadata_json else 2
+    )
     if milestone.status == MilestoneStatus.REJECTED.value and milestone.attempts >= effective_max_attempts:
         raise InvalidStateTransitionError(
             f"Milestone {milestone_idx} has exhausted maximum attempts ({effective_max_attempts})."
@@ -256,7 +238,7 @@ def settle_milestone(
             payload={"milestone_idx": milestone.sequence, "risk_flags": injection_flags},
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
     # State transitions: PENDING/REJECTED -> SUBMITTED -> VERIFYING
@@ -268,7 +250,7 @@ def settle_milestone(
         payload={"milestone_idx": milestone.sequence, "attempt": milestone.attempts + 1},
         contract_id=contract.id,
         org_id=contract.org_id,
-        simulated=is_simulated
+        simulated=is_simulated,
     )
 
     transition_milestone(milestone.status, MilestoneStatus.VERIFYING)
@@ -279,7 +261,7 @@ def settle_milestone(
         payload={"milestone_idx": milestone.sequence},
         contract_id=contract.id,
         org_id=contract.org_id,
-        simulated=is_simulated
+        simulated=is_simulated,
     )
     db.commit()
 
@@ -292,7 +274,11 @@ def settle_milestone(
     # STRUCTURAL INVARIANT ASSERTION: THE ARBITER MUST NEVER BE CALLED ON A FAILING VERIFIER
     if not verif_res.passed:
         # Deterministic Gate FAILED
-        gate_decided = "hidden" if any(c.get("name") == "hidden_tests" and not c.get("passed") for c in verif_res.checks) else "deterministic"
+        gate_decided = (
+            "hidden"
+            if any(c.get("name") == "hidden_tests" and not c.get("passed") for c in verif_res.checks)
+            else "deterministic"
+        )
 
         milestone.attempts += 1
         transition_milestone(milestone.status, MilestoneStatus.REJECTED)
@@ -312,7 +298,7 @@ def settle_milestone(
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
         if milestone.attempts >= effective_max_attempts:
@@ -330,11 +316,11 @@ def settle_milestone(
                 event_type="CONTRACT_VOIDED",
                 payload={
                     "contract_id": contract.id,
-                    "reason": f"Milestone {milestone.sequence} exhausted {effective_max_attempts} attempts."
+                    "reason": f"Milestone {milestone.sequence} exhausted {effective_max_attempts} attempts.",
                 },
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
 
         db.commit()
@@ -351,7 +337,7 @@ def settle_milestone(
             simulated=is_simulated,
             error=verif_res.public_summary,
             gate_decided=gate_decided,
-            risk_flags=injection_flags
+            risk_flags=injection_flags,
         )
 
     # STRUCTURAL INVARIANT ASSERTION
@@ -382,7 +368,7 @@ def settle_milestone(
         },
         contract_id=contract.id,
         org_id=contract.org_id,
-        simulated=arbiter_res.simulated or is_simulated
+        simulated=arbiter_res.simulated or is_simulated,
     )
 
     # Step 4: Handle Fail-Closed policy on Arbiter UNAVAILABLE
@@ -395,11 +381,11 @@ def settle_milestone(
             payload={
                 "milestone_idx": milestone.sequence,
                 "reasons": arbiter_res.reasons,
-                "note": "Fail-closed policy enforced: no money moved, attempt not consumed."
+                "note": "Fail-closed policy enforced: no money moved, attempt not consumed.",
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
         db.commit()
 
@@ -415,7 +401,7 @@ def settle_milestone(
             simulated=is_simulated,
             error="Arbiter unavailable; submission reset to PENDING.",
             gate_decided="arbiter",
-            risk_flags=arbiter_res.risk_flags
+            risk_flags=arbiter_res.risk_flags,
         )
 
     # Step 5: Arbiter VETO
@@ -435,7 +421,7 @@ def settle_milestone(
             },
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=arbiter_res.simulated or is_simulated
+            simulated=arbiter_res.simulated or is_simulated,
         )
 
         if milestone.attempts >= effective_max_attempts:
@@ -453,7 +439,7 @@ def settle_milestone(
                 payload={"contract_id": contract.id, "reason": "Arbiter veto exhausted attempts."},
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
 
         db.commit()
@@ -470,7 +456,7 @@ def settle_milestone(
             simulated=is_simulated,
             error=f"Arbiter Veto: {'; '.join(arbiter_res.reasons)}",
             gate_decided="arbiter",
-            risk_flags=arbiter_res.risk_flags
+            risk_flags=arbiter_res.risk_flags,
         )
 
     # Step 6: Full PASS! Apply Capture Strategy
@@ -486,7 +472,7 @@ def settle_milestone(
             payload={"milestone_idx": milestone.sequence, "amount_cents": milestone.amount_cents},
             contract_id=contract.id,
             org_id=contract.org_id,
-            simulated=is_simulated
+            simulated=is_simulated,
         )
 
         # Check if all milestones are now verified or paid
@@ -494,10 +480,9 @@ def settle_milestone(
             db.query(Milestone)
             .filter(
                 Milestone.contract_id == contract.id,
-                Milestone.status.notin_([
-                    MilestoneStatus.VERIFIED_PENDING_SETTLEMENT.value,
-                    MilestoneStatus.PAID.value
-                ])
+                Milestone.status.notin_(
+                    [MilestoneStatus.VERIFIED_PENDING_SETTLEMENT.value, MilestoneStatus.PAID.value]
+                ),
             )
             .count()
         )
@@ -513,7 +498,7 @@ def settle_milestone(
                 payload={"contract_id": contract.id, "total_cents": contract.total_cents},
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
 
         db.commit()
@@ -529,7 +514,7 @@ def settle_milestone(
             payout_status=milestone.payout_status,
             simulated=is_simulated,
             gate_decided="deterministic",
-            risk_flags=arbiter_res.risk_flags
+            risk_flags=arbiter_res.risk_flags,
         )
 
     else:
@@ -539,11 +524,11 @@ def settle_milestone(
             .filter(
                 Milestone.contract_id == contract.id,
                 Milestone.id != milestone.id,
-                Milestone.status != MilestoneStatus.PAID.value
+                Milestone.status != MilestoneStatus.PAID.value,
             )
             .count()
         )
-        final_capture = (other_unpaid == 0)
+        final_capture = other_unpaid == 0
 
         capture_req_id = f"capture-{contract.id}-{milestone.sequence}"
         payout_req_id = f"payout-{contract.id}-{milestone.sequence}"
@@ -553,7 +538,7 @@ def settle_milestone(
                 authorization_id=contract.paypal_authorization_id or f"DEMO-AUTH-{contract.id}",
                 amount_cents=milestone.amount_cents,
                 final_capture=final_capture,
-                request_id=capture_req_id
+                request_id=capture_req_id,
             )
             append_event(
                 db,
@@ -567,14 +552,14 @@ def settle_milestone(
                 },
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=cap_res.get("simulated", is_simulated)
+                simulated=cap_res.get("simulated", is_simulated),
             )
 
             payout_res = provider.send_payout(
                 recipient_email=contract.worker_email,
                 amount_cents=milestone.amount_cents,
                 request_id=payout_req_id,
-                note=f"Payment for milestone {milestone.sequence}: {milestone.title}"
+                note=f"Payment for milestone {milestone.sequence}: {milestone.title}",
             )
             append_event(
                 db,
@@ -588,7 +573,7 @@ def settle_milestone(
                 },
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
 
             milestone.capture_id = cap_res.get("capture_id")
@@ -609,7 +594,7 @@ def settle_milestone(
                 },
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
 
             if final_capture:
@@ -621,7 +606,7 @@ def settle_milestone(
                     payload={"contract_id": contract.id, "total_cents": contract.total_cents},
                     contract_id=contract.id,
                     org_id=contract.org_id,
-                    simulated=is_simulated
+                    simulated=is_simulated,
                 )
 
             db.commit()
@@ -637,7 +622,7 @@ def settle_milestone(
                 payout_status=milestone.payout_status,
                 simulated=is_simulated,
                 gate_decided="deterministic",
-                risk_flags=arbiter_res.risk_flags
+                risk_flags=arbiter_res.risk_flags,
             )
 
         except (PayPalError, Exception) as exc:
@@ -651,7 +636,7 @@ def settle_milestone(
                 },
                 contract_id=contract.id,
                 org_id=contract.org_id,
-                simulated=is_simulated
+                simulated=is_simulated,
             )
             db.commit()
             raise

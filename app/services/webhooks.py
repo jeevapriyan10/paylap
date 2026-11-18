@@ -1,19 +1,20 @@
-from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import ipaddress
 import json
 import logging
 import socket
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional, Tuple
 from urllib.parse import urlparse
+
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.ids import generate_id
-from app.ledger import append_event
-from app.models import Contract, Event, Organization, WebhookDelivery, WebhookEndpoint
+from app.models import Event, WebhookDelivery, WebhookEndpoint
 
 logger = logging.getLogger("paylap.webhooks")
 
@@ -38,7 +39,12 @@ def is_safe_webhook_url(url: str, allow_test: bool = False) -> Tuple[bool, Optio
     if not hostname:
         return False, "Missing hostname in URL"
 
-    if (allow_test or settings.PAYLAP_ENV == "test") and hostname in ("testserver", "localhost", "127.0.0.1", "example.com"):
+    if (allow_test or settings.PAYLAP_ENV == "test") and hostname in (
+        "testserver",
+        "localhost",
+        "127.0.0.1",
+        "example.com",
+    ):
         return True, None
 
     try:
@@ -72,7 +78,9 @@ def compute_webhook_signature(secret: str, timestamp: int, payload_str: str) -> 
     return f"t={timestamp},v1={sig}"
 
 
-def verify_webhook_signature(secret: str, signature_header: str, payload_str: str, tolerance_seconds: int = 300) -> bool:
+def verify_webhook_signature(
+    secret: str, signature_header: str, payload_str: str, tolerance_seconds: int = 300
+) -> bool:
     """Validates PayLap-Signature header and checks timestamp drift."""
     try:
         parts = dict(item.split("=", 1) for item in signature_header.split(","))

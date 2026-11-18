@@ -4,7 +4,9 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional
+
 import httpx
+
 from app.config import settings
 from app.services.injection_scan import scan_for_injections
 
@@ -58,10 +60,7 @@ def _check_and_record_hourly_cap(org_id: Optional[str]) -> bool:
 
 
 def _call_gemini_arbiter(
-    spec: str,
-    submission: str,
-    risk_flags: List[str],
-    client: Optional[httpx.Client] = None
+    spec: str, submission: str, risk_flags: List[str], client: Optional[httpx.Client] = None
 ) -> ArbiterResult:
     """
     Call Gemini REST API with schema enforcement, unique random boundary delimiters,
@@ -95,44 +94,26 @@ Untrusted Submission Content:
 """
 
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt_text}
-                ]
-            }
-        ],
+        "contents": [{"parts": [{"text": prompt_text}]}],
         "generationConfig": {
             "temperature": 0.0,
             "responseMimeType": "application/json",
             "responseSchema": {
                 "type": "OBJECT",
                 "properties": {
-                    "verdict": {
-                        "type": "STRING",
-                        "enum": ["ok", "veto"]
-                    },
-                    "reasons": {
-                        "type": "ARRAY",
-                        "items": {"type": "STRING"}
-                    },
-                    "risk_flags": {
-                        "type": "ARRAY",
-                        "items": {"type": "STRING"}
-                    }
+                    "verdict": {"type": "STRING", "enum": ["ok", "veto"]},
+                    "reasons": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "risk_flags": {"type": "ARRAY", "items": {"type": "STRING"}},
                 },
-                "required": ["verdict", "reasons", "risk_flags"]
-            }
-        }
+                "required": ["verdict", "reasons", "risk_flags"],
+            },
+        },
     }
 
-    headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
-    }
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
 
     http_client = client or httpx.Client(timeout=15.0)
-    should_close = (client is None)
+    should_close = client is None
 
     try:
         max_retries = 3
@@ -149,7 +130,7 @@ Untrusted Submission Content:
                             verdict="unavailable",
                             reasons=["Gemini returned no candidates."],
                             risk_flags=risk_flags,
-                            source="gemini"
+                            source="gemini",
                         )
 
                     text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
@@ -160,7 +141,7 @@ Untrusted Submission Content:
                             verdict="unavailable",
                             reasons=[f"Invalid verdict received: '{verdict}'"],
                             risk_flags=risk_flags,
-                            source="gemini"
+                            source="gemini",
                         )
 
                     combined_flags = list(set(risk_flags + parsed.get("risk_flags", [])))
@@ -169,7 +150,7 @@ Untrusted Submission Content:
                         reasons=parsed.get("reasons", []),
                         risk_flags=combined_flags,
                         source="gemini",
-                        simulated=False
+                        simulated=False,
                     )
 
                 elif response.status_code in (429, 500, 503) and attempt < max_retries:
@@ -181,7 +162,7 @@ Untrusted Submission Content:
                         verdict="unavailable",
                         reasons=[f"Gemini API returned status {response.status_code}"],
                         risk_flags=risk_flags,
-                        source="gemini"
+                        source="gemini",
                     )
 
             except (httpx.RequestError, json.JSONDecodeError, KeyError) as exc:
@@ -193,14 +174,11 @@ Untrusted Submission Content:
                     verdict="unavailable",
                     reasons=[f"Gemini request exception: {str(exc)}"],
                     risk_flags=risk_flags,
-                    source="gemini"
+                    source="gemini",
                 )
 
         return ArbiterResult(
-            verdict="unavailable",
-            reasons=["Gemini API retries exhausted."],
-            risk_flags=risk_flags,
-            source="gemini"
+            verdict="unavailable", reasons=["Gemini API retries exhausted."], risk_flags=risk_flags, source="gemini"
         )
     finally:
         if should_close:
@@ -212,7 +190,7 @@ def review_submission(
     submission: str,
     mode: Optional[str] = None,
     org_id: Optional[str] = None,
-    client: Optional[httpx.Client] = None
+    client: Optional[httpx.Client] = None,
 ) -> ArbiterResult:
     """
     Evaluate submission through Arbiter.
@@ -230,13 +208,11 @@ def review_submission(
             reasons=["Arbiter mode is off; review skipped."],
             risk_flags=risk_flags,
             source="off",
-            simulated=False
+            simulated=False,
         )
 
     # In-memory cache check: sha256(f"{spec}:{submission}:{model}")
-    cache_key = hashlib.sha256(
-        f"{spec}:{submission}:{model_name}".encode("utf-8")
-    ).hexdigest()
+    cache_key = hashlib.sha256(f"{spec}:{submission}:{model_name}".encode("utf-8")).hexdigest()
 
     if cache_key in _ARBITER_CACHE:
         cached_res = _ARBITER_CACHE[cache_key]
@@ -246,7 +222,7 @@ def review_submission(
             risk_flags=cached_res.risk_flags,
             source=cached_res.source,
             simulated=cached_res.simulated,
-            cached=True
+            cached=True,
         )
 
     # Org-level hourly rate cap check
@@ -257,7 +233,7 @@ def review_submission(
                 reasons=[f"Hourly LLM cap of {settings.PAYLAP_LLM_HOURLY_CAP_PER_ORG} calls exceeded for organization"],
                 risk_flags=risk_flags,
                 source="rate_cap",
-                simulated=False
+                simulated=False,
             )
         result = _call_gemini_arbiter(spec, submission, risk_flags, client=client)
     else:
@@ -268,7 +244,7 @@ def review_submission(
                 reasons=[f"Mock arbiter vetoed due to manipulation flags: {', '.join(risk_flags)}"],
                 risk_flags=risk_flags,
                 source="mock-arbiter",
-                simulated=True
+                simulated=True,
             )
         else:
             result = ArbiterResult(
@@ -276,7 +252,7 @@ def review_submission(
                 reasons=["Mock arbiter verified submission free of manipulation flags."],
                 risk_flags=[],
                 source="mock-arbiter",
-                simulated=True
+                simulated=True,
             )
 
     # Cache successful verdicts (do not cache transient unavailabilities)

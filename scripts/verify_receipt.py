@@ -26,12 +26,7 @@ def rfc8785_canonical_json(data: Any) -> bytes:
 
 
 def compute_event_hash(
-    prev_hash: str,
-    event_type: str,
-    payload: dict,
-    contract_id: Optional[str],
-    simulated: bool,
-    created_at_iso: str
+    prev_hash: str, event_type: str, payload: dict, contract_id: Optional[str], simulated: bool, created_at_iso: str
 ) -> str:
     """Compute deterministic SHA-256 hash using sorted canonical JSON representation."""
     canonical_dict = {
@@ -132,19 +127,19 @@ def main():
         event_count = len(receipt_data.get("events", []))
         signer = receipt_data.get("signer_public_key")
         print("=================================================================")
-        print(f" PayLap Cryptographic Receipt Verification: SUCCESS")
+        print(" PayLap Cryptographic Receipt Verification: SUCCESS")
         print("=================================================================")
         print(f" Contract ID:       {contract_id}")
         print(f" Receipt ID:        {receipt_data.get('receipt_id')}")
         print(f" Total Amount:      {receipt_data.get('total_amount_minor')} {receipt_data.get('currency', 'USD')}")
         print(f" Events Verified:   {event_count} (Genesis to Chain Head)")
         print(f" Signer Public Key: {signer[:16]}...{signer[-16:] if len(signer) > 32 else ''}")
-        print(f" Signature:         Ed25519 Verified OK")
+        print(" Signature:         Ed25519 Verified OK")
         print("=================================================================")
         sys.exit(0)
     else:
         print("=================================================================", file=sys.stderr)
-        print(f" PayLap Cryptographic Receipt Verification: FAILED", file=sys.stderr)
+        print(" PayLap Cryptographic Receipt Verification: FAILED", file=sys.stderr)
         print("=================================================================", file=sys.stderr)
         print(f" Error: {err}", file=sys.stderr)
         print("=================================================================", file=sys.stderr)

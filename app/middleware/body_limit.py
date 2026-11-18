@@ -1,3 +1,5 @@
+from typing import Awaitable, Callable, cast
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -7,7 +9,7 @@ MAX_BODY_SIZE_BYTES = 5 * 1024 * 1024
 
 
 class BodyLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         content_length = request.headers.get("content-length")
         if content_length:
             try:
@@ -29,4 +31,4 @@ class BodyLimitMiddleware(BaseHTTPMiddleware):
             except ValueError:
                 pass
 
-        return await call_next(request)
+        return cast(Response, await call_next(request))

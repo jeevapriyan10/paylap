@@ -1,17 +1,16 @@
 import time
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
 from app.config import settings
 from app.db import get_db
 from app.main import app
-from app.models import ApiKey, Base, LoginAttempt, Membership, Organization, Session as UserSession, User
 from app.routers.auth import Principal
 from app.services.auth import (
-    ROLE_PERMISSIONS,
     has_permission,
-    hash_password,
     validate_password_strength,
 )
 
@@ -59,19 +58,25 @@ def test_signup_closed_mode_requires_invite_code(client, monkeypatch):
     email = f"test_invite_{int(time.time() * 1000)}@example.com"
 
     # Attempt without invite code -> 403
-    res = client.post("/v1/auth/signup", json={
-        "email": email,
-        "password": "SecurePassword1234!",
-    })
+    res = client.post(
+        "/v1/auth/signup",
+        json={
+            "email": email,
+            "password": "SecurePassword1234!",
+        },
+    )
     assert res.status_code == 403
     assert "Valid invite code required" in res.text
 
     # Attempt with valid invite code -> 201
-    res2 = client.post("/v1/auth/signup", json={
-        "email": email,
-        "password": "SecurePassword1234!",
-        "signup_code": "SECRET_INVITE_123",
-    })
+    res2 = client.post(
+        "/v1/auth/signup",
+        json={
+            "email": email,
+            "password": "SecurePassword1234!",
+            "signup_code": "SECRET_INVITE_123",
+        },
+    )
     assert res2.status_code == 201
     assert "paylap_session" in res2.cookies
     assert "paylap_csrf" in res2.cookies
@@ -94,7 +99,9 @@ def test_login_throttling_and_anti_enumeration(client, monkeypatch):
         assert err_msg == "Invalid email or password"
 
     # Attempt for non-existent email -> identical status and detail
-    res_non_existent = client.post("/v1/auth/login", json={"email": "non_existent@example.com", "password": "WrongPassword123!"})
+    res_non_existent = client.post(
+        "/v1/auth/login", json={"email": "non_existent@example.com", "password": "WrongPassword123!"}
+    )
     assert res_non_existent.status_code == 401
     err_msg_ne = res_non_existent.json().get("error", {}).get("message") or res_non_existent.json().get("detail")
     assert err_msg_ne == "Invalid email or password"

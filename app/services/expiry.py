@@ -1,7 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import List, Optional
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.config import settings
 from app.ledger import append_event
 from app.models import Contract
@@ -46,6 +48,7 @@ def expire_due_contracts(
             if ctr.status == ContractStatus.FUNDED.value and ctr.paypal_authorization_id:
                 try:
                     from app.models import Organization
+
                     org = db.scalar(select(Organization).where(Organization.id == ctr.org_id))
                     if org:
                         provider = get_provider(org, ctr.environment, db)

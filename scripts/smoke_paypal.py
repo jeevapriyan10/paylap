@@ -16,18 +16,17 @@ Usage:
 """
 
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.config import settings
 from app.services.paypal_client import PayPalClient
-from app.services.paypal_base import PayPalError
 
 
 def print_step(name: str, passed: bool, detail: str = ""):
@@ -62,16 +61,11 @@ def run_smoke_test(scenario: str):
         "base_url": settings.PAYPAL_BASE_URL,
         "worker_email": worker_email,
         "steps": [],
-        "overall_status": "PENDING"
+        "overall_status": "PENDING",
     }
 
     def record_step(name: str, passed: bool, data: dict = None, error: str = None):
-        step_entry = {
-            "name": name,
-            "passed": passed,
-            "data": data or {},
-            "error": error
-        }
+        step_entry = {"name": name, "passed": passed, "data": data or {}, "error": error}
         report["steps"].append(step_entry)
         detail_msg = json.dumps(data) if data else (error or "")
         print_step(name, passed, detail_msg)
@@ -132,12 +126,11 @@ def run_smoke_test(scenario: str):
             print("\n4. Partial Capture #1: 2.00 USD (final_capture=False)...")
             try:
                 cap1_res = client.capture(
-                    authorization_id=auth_id,
-                    amount_cents=200,
-                    final_capture=False,
-                    request_id=f"cap1-{contract_id}"
+                    authorization_id=auth_id, amount_cents=200, final_capture=False, request_id=f"cap1-{contract_id}"
                 )
-                record_step("Capture #1 (2.00 USD)", True, {"capture_id": cap1_res["capture_id"], "status": cap1_res["status"]})
+                record_step(
+                    "Capture #1 (2.00 USD)", True, {"capture_id": cap1_res["capture_id"], "status": cap1_res["status"]}
+                )
             except Exception as e:
                 all_passed = False
                 record_step("Capture #1 (2.00 USD)", False, error=str(e))
@@ -151,10 +144,12 @@ def run_smoke_test(scenario: str):
                     recipient_email=worker_email,
                     amount_cents=200,
                     request_id=f"payout1-{contract_id}",
-                    note="Smoke test milestone 1 payout"
+                    note="Smoke test milestone 1 payout",
                 )
                 payout1_id = payout1_res.get("payout_batch_id")
-                record_step("Send Payout #1", True, {"payout_batch_id": payout1_id, "status": payout1_res.get("status")})
+                record_step(
+                    "Send Payout #1", True, {"payout_batch_id": payout1_id, "status": payout1_res.get("status")}
+                )
             except Exception as e:
                 all_passed = False
                 record_step("Send Payout #1", False, error=str(e))
@@ -176,12 +171,11 @@ def run_smoke_test(scenario: str):
             print("\n6. Partial Capture #2: 1.00 USD (final_capture=False)...")
             try:
                 cap2_res = client.capture(
-                    authorization_id=auth_id,
-                    amount_cents=100,
-                    final_capture=False,
-                    request_id=f"cap2-{contract_id}"
+                    authorization_id=auth_id, amount_cents=100, final_capture=False, request_id=f"cap2-{contract_id}"
                 )
-                record_step("Capture #2 (1.00 USD)", True, {"capture_id": cap2_res["capture_id"], "status": cap2_res["status"]})
+                record_step(
+                    "Capture #2 (1.00 USD)", True, {"capture_id": cap2_res["capture_id"], "status": cap2_res["status"]}
+                )
             except Exception as e:
                 all_passed = False
                 record_step("Capture #2 (1.00 USD)", False, error=str(e))
@@ -193,7 +187,7 @@ def run_smoke_test(scenario: str):
                     recipient_email=worker_email,
                     amount_cents=100,
                     request_id=f"payout2-{contract_id}",
-                    note="Smoke test milestone 2 payout"
+                    note="Smoke test milestone 2 payout",
                 )
                 record_step("Send Payout #2", True, {"payout_batch_id": payout2_res.get("payout_batch_id")})
             except Exception as e:
@@ -203,10 +197,7 @@ def run_smoke_test(scenario: str):
             # Step 9: Void remaining authorization hold
             print("\n8. Voiding Remaining Authorization...")
             try:
-                void_res = client.void_authorization(
-                    authorization_id=auth_id,
-                    request_id=f"void-{contract_id}"
-                )
+                void_res = client.void_authorization(authorization_id=auth_id, request_id=f"void-{contract_id}")
                 record_step("Void Remaining Authorization", True, {"status": void_res.get("status")})
             except Exception as e:
                 all_passed = False
@@ -251,10 +242,7 @@ def run_smoke_test(scenario: str):
 
             print("\n4. Voiding Full Authorization (no capture)...")
             try:
-                void_res = client.void_authorization(
-                    authorization_id=auth_id,
-                    request_id=f"void-{contract_id}"
-                )
+                void_res = client.void_authorization(authorization_id=auth_id, request_id=f"void-{contract_id}")
                 record_step("Void Full Authorization", True, {"status": void_res.get("status")})
             except Exception as e:
                 all_passed = False
