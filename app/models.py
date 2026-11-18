@@ -19,6 +19,11 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def generate_short_id() -> str:
+    """Backwards-compatible short id generator."""
+    return generate_id("id")
+
+
 class Base(DeclarativeBase):
     pass
 

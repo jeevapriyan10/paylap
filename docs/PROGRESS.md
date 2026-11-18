@@ -24,16 +24,16 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Alembic baseline migration running as owner
   - [x] **Exit Gate**: Migration up/down/up and `alembic check` clean; RLS test proves zero rows without org and zero cross-org leaks; asserts runtime role has `rolbypassrls=false` and is not table owner. (Passed: 3/3 tests)
 
-- [ ] **P2: Auth, RBAC, and API Keys**
-  - [ ] `POST /v1/auth/signup`, `login`, `logout`, `GET /v1/auth/me`
-  - [ ] Argon2id password hashing (min length 12, common password blacklist check, rehash on login)
-  - [ ] Server-side sessions (256-bit random token, SHA-256 hash stored, 24h idle / 14d absolute timeout, HttpOnly/SameSite/Secure cookies)
-  - [ ] Double-submit CSRF cookie (`paylap_csrf` + `X-CSRF-Token`) for cookie auth unsafe methods; Bearer exempt
-  - [ ] Login throttling (5 failures per email+IP per 15 min -> 429 with `Retry-After`; constant-time equalized errors)
-  - [ ] RBAC permission matrix (`viewer`, `developer`, `admin`, `owner`)
-  - [ ] API keys (`pl_test_...` and `pl_live_...`, lookup ID + hashed secret, scoped permissions, environment class)
-  - [ ] Principal dependency resolving cookie or Bearer into an org-scoped session
-  - [ ] **Exit Gate**: Auth, CSRF, throttling, anti-enumeration, RBAC matrix, key-scope, and environment-class tests pass.
+- [x] **P2: Auth, RBAC, and API Keys**
+  - [x] `POST /v1/auth/signup`, `login`, `logout`, `GET /v1/auth/me`
+  - [x] Argon2id password hashing (min length 12, common password blacklist check, rehash on login)
+  - [x] Server-side sessions (256-bit random token, SHA-256 hash stored, 24h idle / 14d absolute timeout, HttpOnly/SameSite/Secure cookies)
+  - [x] Double-submit CSRF cookie (`paylap_csrf` + `X-CSRF-Token`) for cookie auth unsafe methods; Bearer exempt
+  - [x] Login throttling (5 failures per email+IP per 15 min -> 429 with `Retry-After`; constant-time equalized errors)
+  - [x] RBAC permission matrix (`viewer`, `developer`, `admin`, `owner`)
+  - [x] API keys (`pl_test_...` and `pl_live_...`, lookup ID + hashed secret, scoped permissions, environment class)
+  - [x] Principal dependency resolving cookie or Bearer into an org-scoped session
+  - [x] **Exit Gate**: Auth, CSRF, throttling, anti-enumeration, RBAC matrix, key-scope, and environment-class tests pass. (Passed: 6/6 tests)
 
 - [ ] **P3: Platform Plumbing**
   - [ ] Request ID middleware (`X-Request-ID`)

@@ -4,41 +4,36 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.config import settings
-from app.db import init_db
-from app.routers import arena, contracts, stream, system, workers
+from app.routers import arena, auth, contracts, stream, system, workers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database tables on startup
-    init_db()
+    # App never calls create_all; schema is managed exclusively via Alembic
     yield
 
 
 app = FastAPI(
-    title="PayLap API",
-    description="Escrow and milestone-settlement layer for AI agents ('Pay on proof, not on promise').",
-    version="0.2.0",
+    title="PayLap Settlement API",
+    description="Multi-tenant settlement API for verified-delivery payment holds.",
+    version="1.0.0",
+    docs_url="/docs" if settings.PAYLAP_ENABLE_DOCS else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if settings.PAYLAP_ENABLE_DOCS else None,
     lifespan=lifespan,
 )
 
-# CORS middleware for localhost development
+# Strict CORS configuration restricted to settings.PAYLAP_CORS_ORIGINS (never *)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost",
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-        "*"
-    ],
+    allow_origins=settings.PAYLAP_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Include API routers
+app.include_router(auth.router)
 app.include_router(system.router)
 app.include_router(contracts.router)
 app.include_router(workers.router)
@@ -48,8 +43,7 @@ app.include_router(stream.router)
 
 @app.get("/", include_in_schema=False)
 def serve_frontend_placeholder():
-    """Serve the minimal frontend static placeholder page."""
     index_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "index.html")
     if os.path.exists(index_file):
         return FileResponse(index_file)
-    return {"message": "PayLap API is running. See /docs for API documentation."}
+    return {"message": "PayLap Settlement API is running. See /docs for API documentation."}
