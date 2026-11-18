@@ -1,202 +1,195 @@
+import base64
 import hashlib
-import hmac
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.config import settings
+from app.ids import generate_id
 from app.ledger import compute_event_hash
-from app.models import Contract, Event, utc_now
+from app.models import Contract, Event
 from app.schemas import cents_to_usd_str
 from app.services.policy import mask_email
 
 
-def canonical_json_dumps(data: Any) -> str:
-    """Deterministic JSON serialization with sorted keys and compact separators."""
-    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+def rfc8785_canonical_json(data: Any) -> bytes:
+    """
+    Deterministic RFC 8785 (JSON Canonicalization Scheme) serialization:
+    - Object keys sorted lexicographically
+    - Whitespace removed between tokens
+    - UTF-8 encoded without BOM
+    """
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def compute_receipt_signature(receipt_dict: Dict[str, Any], secret: str) -> str:
-    """Compute HMAC-SHA256 hex digest over canonical JSON of receipt excluding signature field."""
-    payload_to_sign = {k: v for k, v in receipt_dict.items() if k != "signature"}
-    canonical_bytes = canonical_json_dumps(payload_to_sign).encode("utf-8")
-    return hmac.new(secret.encode("utf-8"), canonical_bytes, hashlib.sha256).hexdigest()
+def get_receipt_signing_key() -> Tuple[ed25519.Ed25519PrivateKey, str, str]:
+    """
+    Derives an Ed25519 private key from the primary active master key using HKDF (info='paylap-receipt-v2').
+    Returns (private_key, base64_public_key, key_id).
+    """
+    key_id, master_bytes = settings.active_master_key
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"paylap-receipt-v2",
+    )
+    seed = hkdf.derive(master_bytes)
+    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+    pub_raw = private_key.public_key().public_bytes_raw()
+    pub_b64 = base64.b64encode(pub_raw).decode("utf-8")
+    return private_key, pub_b64, key_id
 
 
 def generate_receipt(contract: Contract, db: Session) -> Dict[str, Any]:
     """
-    Generate a self-contained, tamper-evident cryptographic receipt for a contract.
-    Contains contract summary, milestone outcomes, complete event trail, and HMAC-SHA256 signature.
+    Generate a self-contained, tamper-evident cryptographic receipt (Receipt v2) for a contract.
+    Contains contract summary, milestones, complete event trail, chain head hash, and Ed25519 signature.
     Worker email is masked and hidden tests are never included.
     """
-    secret, key_id = settings.receipt_signing_info
+    private_key, signer_public_key, key_id = get_receipt_signing_key()
 
     # Collect milestones (excluding hidden test definitions)
     milestones_data = [
         {
-            "idx": m.idx,
+            "idx": m.sequence,
             "title": m.title,
+            "amount_minor": m.amount_cents,
             "amount_cents": m.amount_cents,
             "amount_usd": cents_to_usd_str(m.amount_cents),
-            "verifier_type": getattr(m, "verifier_type", "python_code") or "python_code",
             "status": m.status,
-            "attempts": m.attempts,
+            "verifier_type": m.verifier_type or "python_code",
+            "attempts": m.attempts_count,
             "capture_id": m.capture_id,
-            "payout_batch_id": m.payout_batch_id,
+            "payout_batch_id": m.payout_id,
             "paid_at": m.paid_at.isoformat() if m.paid_at else None,
         }
-        for m in sorted(contract.milestones, key=lambda x: x.idx)
+        for m in sorted(contract.milestones, key=lambda x: x.sequence)
     ]
 
     # Collect contract event trail
-    events = (
-        db.query(Event)
-        .filter(Event.contract_id == contract.id)
-        .order_by(Event.seq.asc())
-        .all()
-    )
+    events = db.scalars(
+        select(Event).where(Event.contract_id == contract.id).order_by(Event.seq.asc())
+    ).all()
 
     events_data = [
         {
-            "id": e.id,
-            "contract_id": e.contract_id,
             "seq": e.seq,
-            "type": e.type,
+            "type": e.event_type,
+            "hash": e.event_hash,
+            "prev_hash": e.prev_hash,
             "payload": e.payload,
             "simulated": e.simulated,
-            "prev_hash": e.prev_hash,
-            "hash": e.hash,
             "created_at": e.created_at.isoformat() if e.created_at else None,
         }
         for e in events
     ]
 
-    # Verify event hashes within receipt
-    events_valid = True
-    for e in events_data:
-        recalc_hash = compute_event_hash(
-            prev_hash=e["prev_hash"],
-            event_type=e["type"],
-            payload=e["payload"],
-            contract_id=e["contract_id"],
-            simulated=e["simulated"],
-            created_at_iso=e["created_at"],
-        )
-        if recalc_hash != e["hash"]:
-            events_valid = False
-            break
+    chain_head_hash = (
+        events[-1].event_hash
+        if events
+        else hashlib.sha256(f"paylap:genesis:{contract.id}".encode("utf-8")).hexdigest()
+    )
 
-    settled_at = None
-    if contract.status in ("COMPLETED", "VOIDED"):
-        settled_at = contract.updated_at.isoformat() if contract.updated_at else None
+    completed_at = (
+        contract.updated_at.isoformat()
+        if contract.status in ("COMPLETED", "VOIDED") and contract.updated_at
+        else None
+    )
 
-    receipt: Dict[str, Any] = {
-        "schema_version": "1.0",
+    masked_worker_email = mask_email(contract.worker_email)
+    hidden_commitments = [
+        m.hidden_commitment_hash for m in contract.milestones if m.hidden_commitment_hash
+    ]
+
+    receipt_payload: Dict[str, Any] = {
+        "receipt_id": generate_id("rcpt"),
+        "version": "2.0",
+        "schema_version": "2.0",
         "contract_id": contract.id,
         "title": contract.title,
-        "buyer_id": contract.buyer_id,
+        "buyer_org_id": contract.org_id,
+        "buyer_id": contract.org_id,
         "worker_id": contract.worker_id,
-        "worker_email": mask_email(contract.worker_email),
+        "worker_email_masked": masked_worker_email,
+        "worker_email": masked_worker_email,
+        "total_amount_minor": contract.total_cents,
         "total_cents": contract.total_cents,
         "total_usd": cents_to_usd_str(contract.total_cents),
         "currency": contract.currency,
         "status": contract.status,
-        "mode": contract.mode,
-        "created_at": contract.created_at.isoformat() if contract.created_at else None,
-        "settled_at": settled_at,
-        "hidden_commitment": getattr(contract, "hidden_commitment", None),
+        "completed_at": completed_at,
         "milestones": milestones_data,
+        "hidden_test_commitments": hidden_commitments,
         "events": events_data,
-        "event_hash_chain_valid": events_valid,
-        "key_id": key_id,
-        "issued_at": utc_now().isoformat(),
+        "chain_head_hash": chain_head_hash,
+        "signer_key_id": key_id,
+        "signer_public_key": signer_public_key,
     }
 
-    # Compute signature
-    signature = compute_receipt_signature(receipt, secret)
-    receipt["signature"] = signature
+    # Ed25519 signature over RFC 8785 canonical JSON
+    canonical_bytes = rfc8785_canonical_json(receipt_payload)
+    sig_raw = private_key.sign(canonical_bytes)
+    receipt_payload["signature"] = base64.b64encode(sig_raw).decode("utf-8")
 
-    return receipt
+    return receipt_payload
 
 
-def verify_receipt(receipt_data: Dict[str, Any], db: Optional[Session] = None) -> Dict[str, Any]:
+def verify_receipt(receipt: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     """
-    Cryptographically verify a receipt payload:
-    1. Recompute HMAC-SHA256 signature using canonical JSON representation.
-    2. Verify cryptographic hash of every event in the event trail.
-    3. If DB is provided, verify matching record exists.
+    Offline verification of an Ed25519 digital receipt (v2).
+    Validates canonical JSON, Ed25519 signature, and event hash chain replay.
+    Returns (is_valid, error_message).
     """
-    secret, _ = settings.receipt_signing_info
+    if not isinstance(receipt, dict):
+        return False, "Receipt must be a JSON object"
 
-    signature = receipt_data.get("signature")
-    if not signature:
-        return {
-            "valid": False,
-            "signature_valid": False,
-            "chain_valid": False,
-            "contract_id": receipt_data.get("contract_id"),
-            "status": receipt_data.get("status"),
-            "details": "Receipt is missing 'signature' field.",
-        }
+    signature_b64 = receipt.get("signature")
+    pubkey_b64 = receipt.get("signer_public_key")
+    if not signature_b64 or not pubkey_b64:
+        return False, "Receipt missing signature or signer_public_key"
 
-    # 1. Verify HMAC signature
-    expected_sig = compute_receipt_signature(receipt_data, secret)
-    signature_valid = hmac.compare_digest(str(signature), expected_sig)
+    # 1. Verify Ed25519 signature
+    payload_to_verify = {k: v for k, v in receipt.items() if k != "signature"}
+    try:
+        canonical_bytes = rfc8785_canonical_json(payload_to_verify)
+        sig_bytes = base64.b64decode(signature_b64)
+        pub_bytes = base64.b64decode(pubkey_b64)
+        pub_key = ed25519.Ed25519PublicKey.from_public_bytes(pub_bytes)
+        pub_key.verify(sig_bytes, canonical_bytes)
+    except Exception as exc:
+        return False, f"Signature verification failed: {exc}"
 
-    # 2. Verify event hashes
-    events = receipt_data.get("events", [])
-    chain_valid = True
-    chain_error = None
+    # 2. Verify event hash chain replay
+    contract_id = receipt.get("contract_id")
+    events = receipt.get("events", [])
+    expected_prev = hashlib.sha256(f"paylap:genesis:{contract_id}".encode("utf-8")).hexdigest()
 
-    for idx, e in enumerate(events):
-        try:
-            recalc_hash = compute_event_hash(
-                prev_hash=e.get("prev_hash", ""),
-                event_type=e.get("type", ""),
-                payload=e.get("payload", {}),
-                contract_id=e.get("contract_id"),
-                simulated=e.get("simulated", False),
-                created_at_iso=e.get("created_at", ""),
-            )
-            if recalc_hash != e.get("hash"):
-                chain_valid = False
-                chain_error = f"Event hash mismatch at sequence {e.get('seq', idx)}."
-                break
-        except Exception as exc:
-            chain_valid = False
-            chain_error = f"Malformed event at index {idx}: {exc}"
-            break
+    for idx, e in enumerate(events, start=1):
+        if e.get("seq") != idx:
+            return False, f"Event sequence break at index {idx}: expected {idx}, got {e.get('seq')}"
 
-    # 3. Optional DB cross-check
-    db_match = True
-    if db is not None:
-        contract_id = receipt_data.get("contract_id")
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            db_match = False
-            chain_error = f"Contract '{contract_id}' not found in local database."
-        elif contract.status != receipt_data.get("status"):
-            db_match = False
-            chain_error = f"Status mismatch: DB has '{contract.status}', receipt has '{receipt_data.get('status')}'."
+        if e.get("prev_hash") != expected_prev:
+            return False, f"Broken event hash link at seq {e.get('seq')}"
 
-    is_valid = signature_valid and chain_valid and db_match
+        recalc = compute_event_hash(
+            prev_hash=e["prev_hash"],
+            event_type=e["type"],
+            payload=e["payload"],
+            contract_id=contract_id,
+            simulated=bool(e.get("simulated", False)),
+            created_at_iso=e["created_at"],
+        )
+        if recalc != e.get("hash"):
+            return False, f"Corrupted event hash at seq {e.get('seq')}"
 
-    if is_valid:
-        details = "Receipt is cryptographically authentic and untampered."
-    else:
-        details_list = []
-        if not signature_valid:
-            details_list.append("HMAC signature verification failed (payload tampered or wrong key).")
-        if not chain_valid:
-            details_list.append(chain_error or "Event hash chain verification failed.")
-        if not db_match:
-            details_list.append(chain_error or "Database cross-reference check failed.")
-        details = " ".join(details_list)
+        expected_prev = e["hash"]
 
-    return {
-        "valid": is_valid,
-        "signature_valid": signature_valid,
-        "chain_valid": chain_valid,
-        "contract_id": receipt_data.get("contract_id"),
-        "status": receipt_data.get("status"),
-        "details": details,
-    }
+    if events:
+        if receipt.get("chain_head_hash") != events[-1]["hash"]:
+            return False, "chain_head_hash mismatch with final event hash"
+
+    return True, None

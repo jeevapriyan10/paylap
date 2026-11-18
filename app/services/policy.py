@@ -114,10 +114,6 @@ def mask_email(email: str) -> str:
     if not email or "@" not in email:
         return "***"
     user_part, domain_part = email.split("@", 1)
-    if len(user_part) <= 1:
-        masked_user = "*"
-    elif len(user_part) == 2:
-        masked_user = user_part[0] + "*"
-    else:
-        masked_user = user_part[0] + "*" * (len(user_part) - 2) + user_part[-1]
-    return f"{masked_user}@{domain_part}"
+    if not user_part:
+        return f"***@{domain_part}"
+    return f"{user_part[0]}***@{domain_part}"

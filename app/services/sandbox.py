@@ -174,7 +174,7 @@ def _build_scrubbed_env(temp_dir: str) -> dict:
     return scrubbed
 
 
-def _get_preexec_rlimits():
+def _get_preexec_rlimits(memory_mb: int = 512):
     """Return preexec_fn on platforms supporting the resource module (POSIX)."""
     try:
         import resource  # Available on Linux/macOS only
@@ -183,8 +183,8 @@ def _get_preexec_rlimits():
             try:
                 # 5s CPU time limit
                 resource.setrlimit(resource.RLIMIT_CPU, (5, 8))
-                # 512 MB virtual memory limit
-                resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
+                # Virtual memory limit
+                resource.setrlimit(resource.RLIMIT_AS, (memory_mb * 1024 * 1024, memory_mb * 1024 * 1024))
                 # 10 MB maximum file size
                 resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
                 # 64 maximum open files

@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -9,7 +10,7 @@ from app.config import settings
 from app.db import get_db
 from app.ids import generate_id
 from app.ledger import append_event
-from app.models import Contract, Milestone, Event, Organization
+from app.models import Contract, Milestone, Event, Organization, ShareToken
 from app.routers.auth import Principal, get_current_principal
 from app.schemas import (
     ContractCreate,
@@ -850,3 +851,43 @@ def get_contract_receipt(
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
     return generate_receipt(contract, db)
+
+
+@router.post("/{contract_id}/share")
+def create_receipt_share_token(
+    contract_id: str,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Generate an unguessable public share token for this contract's receipt.
+    Requires receipts:read permission.
+    """
+    principal.require_scope("receipts:read")
+    set_tenant_org(db, principal.org_id)
+
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id))
+    if not contract:
+        raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
+
+    token_str = f"shr_{secrets.token_hex(20)}"
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=30)
+
+    token_record = ShareToken(
+        id=generate_id("tok"),
+        org_id=principal.org_id,
+        contract_id=contract.id,
+        token=token_str,
+        expires_at=expires_at,
+        created_at=now,
+    )
+    db.add(token_record)
+    db.commit()
+
+    return {
+        "share_token": token_str,
+        "share_url": f"{settings.PAYLAP_PUBLIC_URL}/v1/receipts/{token_str}",
+        "expires_at": expires_at.isoformat(),
+        "contract_id": contract.id,
+    }

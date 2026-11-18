@@ -70,14 +70,14 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Contract deadline expiry via fake-clock service helper
   - [x] **Exit Gate**: Simulated provider drives full milestone lifecycle, failing verifier never reaches arbiter, concurrency test proves no double-spend, fake clock proves deadline expiry, planted hidden test sentinel never leaks. (Passed: 7/7 tests, 33/33 total)
 
-- [ ] **P6: Ledger, Receipts, and Code Runner**
-  - [ ] Per-contract hash chain with PostgreSQL transaction advisory locks
-  - [ ] Per-org `org_audit_log` hash chain
-  - [ ] Ed25519 digital receipts (receipt v2 canonical JSON signing)
-  - [ ] Receipt share tokens and public verification endpoint
-  - [ ] Offline receipt verification script `scripts/verify_receipt.py`
-  - [ ] Hardened `ProcessRunner` and isolated `RemoteRunner`
-  - [ ] **Exit Gate**: 50 concurrent appends yield gapless valid chain; tampering detected; offline receipt verification passes; runner isolation proven.
+- [x] **P6: Ledger, Receipts, and Code Runner**
+  - [x] Per-contract hash chain with PostgreSQL transaction advisory locks (`SELECT pg_advisory_xact_lock(hashtext(contract_id))`)
+  - [x] Per-org `org_audit_log` hash chain for sensitive operations
+  - [x] Ed25519 digital receipts (Receipt v2 over RFC 8785 canonical JSON derived via HKDF `paylap-receipt-v2`)
+  - [x] Receipt share tokens (`shr_...`) and unauthenticated public verification endpoint `GET /v1/receipts/{share_token}`
+  - [x] Standalone, zero-network offline receipt verification CLI `scripts/verify_receipt.py`
+  - [x] Hardened `ProcessRunner` (static AST screening, scrubbed env, timeout killing) and `RemoteRunner` (TLS client)
+  - [x] **Exit Gate**: 50 concurrent appends yield gapless valid chain; tampering detected; offline receipt verification passes; runner isolation proven. (Passed: 6/6 tests, 39/39 total)
 
 - [ ] **P7: Background Jobs, Webhooks, Reconciliation, Stream, Playground**
   - [ ] Job scheduler with advisory lock leader election

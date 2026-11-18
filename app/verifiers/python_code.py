@@ -1,23 +1,24 @@
 import re
 import time
 from typing import Any
-from app.services.sandbox import run_python_tests
+from app.services.runner import get_runner
 from app.verifiers.base import VerifierBase, VerificationResult
 
 
 class PythonCodeVerifier(VerifierBase):
     """
     Deterministic verifier for Python code submissions.
-    Runs public tests first, followed by hidden tests in a separate sandbox.
+    Runs public tests first, followed by hidden tests via the configured CodeRunner.
     Never leaks hidden test names, assertions, or values in public_summary.
     """
 
     def verify(self, milestone: Any, submission: str) -> VerificationResult:
         start_time = time.perf_counter()
+        runner = get_runner()
 
         # Step 1: Run public tests
         public_tests = milestone.public_tests or ""
-        public_res = run_python_tests(code=submission, tests=public_tests)
+        public_res = runner.run(code=submission, tests=public_tests)
 
         if not public_res.passed:
             duration_ms = (time.perf_counter() - start_time) * 1000.0
@@ -36,7 +37,7 @@ class PythonCodeVerifier(VerifierBase):
         # Step 2: Run hidden tests in a separate sandbox run if present
         hidden_tests = milestone.hidden_tests
         if hidden_tests and hidden_tests.strip():
-            hidden_res = run_python_tests(code=submission, tests=hidden_tests)
+            hidden_res = runner.run(code=submission, tests=hidden_tests)
 
             # Count total hidden test functions
             test_funcs = re.findall(r"def\s+(test_\w+)", hidden_tests)
