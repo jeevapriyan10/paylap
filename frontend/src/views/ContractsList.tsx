@@ -27,9 +27,10 @@ export interface ContractItem {
 export interface ContractsListProps {
   onSelectContract: (id: string) => void;
   onNavigateNew: () => void;
+  onOpenAuth?: () => void;
 }
 
-export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, onNavigateNew }) => {
+export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, onNavigateNew, onOpenAuth }) => {
   const [contracts, setContracts] = useState<ContractItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,9 +131,39 @@ export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, 
           <p style={{ color: "var(--text-secondary)" }}>Loading settlement contracts...</p>
         </div>
       ) : error ? (
-        <div className="card" style={{ borderColor: "var(--accent-rose)", padding: "2rem" }}>
-          <p style={{ color: "var(--accent-rose)", fontWeight: 600 }}>Error loading contracts</p>
-          <p style={{ color: "var(--text-secondary)", marginTop: "0.5rem" }}>{error}</p>
+        <div
+          className="card"
+          style={{
+            borderColor: error.includes("Authentication") ? "var(--accent-amber)" : "var(--accent-rose)",
+            padding: "2.5rem",
+            textAlign: "center",
+          }}
+        >
+          <p
+            style={{
+              color: error.includes("Authentication") ? "var(--accent-amber)" : "var(--accent-rose)",
+              fontWeight: 700,
+              fontSize: "1.1rem",
+            }}
+          >
+            {error.includes("Authentication") ? "Authentication Required" : "Error Loading Contracts"}
+          </p>
+          <p
+            style={{
+              color: "var(--text-secondary)",
+              maxWidth: "480px",
+              margin: "0.5rem auto 1.5rem auto",
+            }}
+          >
+            {error.includes("Authentication")
+              ? "Sign in to your organization or provide a developer API key to view and manage settlement contracts."
+              : error}
+          </p>
+          {error.includes("Authentication") && onOpenAuth && (
+            <button className="btn btn-primary" onClick={onOpenAuth}>
+              ⚡ Sign In / Quick Dev Login
+            </button>
+          )}
         </div>
       ) : filteredContracts.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: "4rem 2rem" }}>
