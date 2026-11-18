@@ -15,14 +15,14 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Pinned dependencies in `requirements.txt`
   - [x] **Exit Gate**: Settings tests pass; rules and progress files exist. (Passed: 7/7 tests)
 
-- [ ] **P1: Database, Roles, and Row-Level Security (RLS)**
-  - [ ] PostgreSQL Docker Compose configuration with healthcheck
-  - [ ] Role initialization (`paylap_owner` schema owner/migrator, `paylap_app` runtime DML only, `NOBYPASSRLS`)
-  - [ ] SQLAlchemy 2.x declarative models with prefixed public IDs (`org_`, `usr_`, `key_`, `ctr_`, `mst_`, `evt_`)
-  - [ ] RLS policies enabled and forced on all tenant tables
-  - [ ] Org session context helper `org_session(org_id)` setting `app.current_org`
-  - [ ] Alembic baseline migration running as owner
-  - [ ] **Exit Gate**: Migration up/down/up and `alembic check` clean; RLS test proves zero rows without org and zero cross-org leaks; asserts runtime role has `rolbypassrls=false` and is not table owner.
+- [x] **P1: Database, Roles, and Row-Level Security (RLS)**
+  - [x] PostgreSQL Docker Compose configuration with healthcheck
+  - [x] Role initialization (`paylap_owner` schema owner/migrator, `paylap_app` runtime DML only, `NOBYPASSRLS`)
+  - [x] SQLAlchemy 2.x declarative models with prefixed public IDs (`org_`, `usr_`, `key_`, `ctr_`, `mst_`, `evt_`)
+  - [x] RLS policies enabled and forced on all tenant tables
+  - [x] Org session context helper `org_session(org_id)` setting `app.current_org`
+  - [x] Alembic baseline migration running as owner
+  - [x] **Exit Gate**: Migration up/down/up and `alembic check` clean; RLS test proves zero rows without org and zero cross-org leaks; asserts runtime role has `rolbypassrls=false` and is not table owner. (Passed: 3/3 tests)
 
 - [ ] **P2: Auth, RBAC, and API Keys**
   - [ ] `POST /v1/auth/signup`, `login`, `logout`, `GET /v1/auth/me`
