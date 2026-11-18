@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.services.reputation import compute_worker_reputation, list_worker_reputations
 
-router = APIRouter(prefix="/api/workers", tags=["Workers"])
+router = APIRouter(prefix="/v1/workers", tags=["Workers"])
 
 
 @router.get("", response_model=List[Dict[str, Any]])

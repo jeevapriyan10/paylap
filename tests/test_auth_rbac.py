@@ -56,10 +56,11 @@ def test_password_strength_validation():
 def test_signup_closed_mode_requires_invite_code(client, monkeypatch):
     monkeypatch.setattr(settings, "PAYLAP_SIGNUP_MODE", "closed")
     monkeypatch.setattr(settings, "PAYLAP_SIGNUP_CODE", "SECRET_INVITE_123")
+    email = f"test_invite_{int(time.time() * 1000)}@example.com"
 
     # Attempt without invite code -> 403
     res = client.post("/v1/auth/signup", json={
-        "email": "test_invite@example.com",
+        "email": email,
         "password": "SecurePassword1234!",
     })
     assert res.status_code == 403
@@ -67,7 +68,7 @@ def test_signup_closed_mode_requires_invite_code(client, monkeypatch):
 
     # Attempt with valid invite code -> 201
     res2 = client.post("/v1/auth/signup", json={
-        "email": "test_invite@example.com",
+        "email": email,
         "password": "SecurePassword1234!",
         "signup_code": "SECRET_INVITE_123",
     })
@@ -78,7 +79,7 @@ def test_signup_closed_mode_requires_invite_code(client, monkeypatch):
 
 def test_login_throttling_and_anti_enumeration(client, monkeypatch):
     monkeypatch.setattr(settings, "PAYLAP_SIGNUP_MODE", "open")
-    email = f"throttle_{int(time.time())}@example.com"
+    email = f"throttle_{int(time.time() * 1000)}@example.com"
     pwd = "ValidPassword1234!"
 
     # Signup user
@@ -89,12 +90,14 @@ def test_login_throttling_and_anti_enumeration(client, monkeypatch):
     for _ in range(4):
         res_fail = client.post("/v1/auth/login", json={"email": email, "password": "WrongPassword123!"})
         assert res_fail.status_code == 401
-        assert res_fail.json()["detail"] == "Invalid email or password"
+        err_msg = res_fail.json().get("error", {}).get("message") or res_fail.json().get("detail")
+        assert err_msg == "Invalid email or password"
 
     # Attempt for non-existent email -> identical status and detail
     res_non_existent = client.post("/v1/auth/login", json={"email": "non_existent@example.com", "password": "WrongPassword123!"})
     assert res_non_existent.status_code == 401
-    assert res_non_existent.json()["detail"] == "Invalid email or password"
+    err_msg_ne = res_non_existent.json().get("error", {}).get("message") or res_non_existent.json().get("detail")
+    assert err_msg_ne == "Invalid email or password"
 
     # 5th failed attempt -> still 401
     res_5th = client.post("/v1/auth/login", json={"email": email, "password": "WrongPassword123!"})

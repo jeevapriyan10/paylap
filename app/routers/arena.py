@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from app.arena import RUNS, SCENARIOS, run_arena
 
-router = APIRouter(prefix="/api/arena", tags=["Red Team Arena"])
+router = APIRouter(prefix="/v1/arena", tags=["Red Team Arena"])
 
 
 class ArenaRunRequest(BaseModel):

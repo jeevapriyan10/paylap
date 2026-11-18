@@ -23,7 +23,7 @@ from app.state import (
     transition_contract,
 )
 
-router = APIRouter(prefix="/api/contracts", tags=["Contracts"])
+router = APIRouter(prefix="/v1/contracts", tags=["Contracts"])
 
 
 def format_contract_response(contract: Contract) -> ContractResponse:

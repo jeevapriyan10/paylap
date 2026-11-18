@@ -4,12 +4,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.config import settings
-from app.routers import arena, auth, contracts, stream, system, workers
+from app.error_handlers import register_error_handlers
+from app.logging_conf import configure_logging
+from app.middleware.body_limit import BodyLimitMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.routers import arena, auth, contracts, health, stream, system, workers
+
+# Initialize structured logging
+configure_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # App never calls create_all; schema is managed exclusively via Alembic
+    # Schema migrations run exclusively through Alembic; the application never calls create_all
     yield
 
 
@@ -23,7 +32,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Strict CORS configuration restricted to settings.PAYLAP_CORS_ORIGINS (never *)
+# Register custom error handlers (Standard error body format)
+register_error_handlers(app)
+
+# Middlewares are executed in reverse order of addition:
+# 1. RequestIdMiddleware (runs first and sets request.state.request_id)
+# 2. SecurityHeadersMiddleware (attaches standard security headers)
+# 3. BodyLimitMiddleware (enforces 5MB max payload size)
+# 4. RateLimitMiddleware (token-bucket limiter)
+# 5. CORSMiddleware (strictly restricted to PAYLAP_CORS_ORIGINS, never *)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(BodyLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.PAYLAP_CORS_ORIGINS,
@@ -32,13 +53,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routers
+# Health & Probe routes (/healthz, /readyz)
+app.include_router(health.router)
+
+# V1 API Routes
 app.include_router(auth.router)
-app.include_router(system.router)
 app.include_router(contracts.router)
 app.include_router(workers.router)
 app.include_router(arena.router)
 app.include_router(stream.router)
+app.include_router(system.router)
 
 
 @app.get("/", include_in_schema=False)

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Event
 
-router = APIRouter(prefix="/api/stream", tags=["Streaming"])
+router = APIRouter(prefix="/v1/stream", tags=["Streaming"])
 
 
 async def event_stream_generator(

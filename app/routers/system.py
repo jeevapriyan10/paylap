@@ -9,7 +9,7 @@ from app.schemas import HealthResponse
 
 from app.verifiers import list_available_verifiers
 
-router = APIRouter(prefix="/api", tags=["System"])
+router = APIRouter(prefix="/v1/system", tags=["System"])
 
 
 @router.get("/health", response_model=HealthResponse)

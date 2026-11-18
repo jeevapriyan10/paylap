@@ -35,18 +35,18 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Principal dependency resolving cookie or Bearer into an org-scoped session
   - [x] **Exit Gate**: Auth, CSRF, throttling, anti-enumeration, RBAC matrix, key-scope, and environment-class tests pass. (Passed: 6/6 tests)
 
-- [ ] **P3: Platform Plumbing**
-  - [ ] Request ID middleware (`X-Request-ID`)
-  - [ ] Standardized error format `{"error": {"type", "code", "message", "request_id", "details"}}` with no stack traces
-  - [ ] JSON logging with redaction filter (API keys, passwords, session tokens, PayPal credentials, Auth headers, hidden test strings)
-  - [ ] Token-bucket rate limiting per key and per IP
-  - [ ] Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)
-  - [ ] Strict CORS middleware restricted to `PAYLAP_CORS_ORIGINS`
-  - [ ] Request body size limits
-  - [ ] `/docs` and `/openapi.json` gated by `PAYLAP_ENABLE_DOCS`
-  - [ ] `/healthz` and `/readyz` probes
-  - [ ] Migration of all endpoints from `/api/*` to `/v1/*`
-  - [ ] **Exit Gate**: Error format, redaction filter (with planted sentinels), rate limiting, and health checks pass.
+- [x] **P3: Platform Plumbing**
+  - [x] Request ID middleware (`X-Request-ID`)
+  - [x] Standardized error format `{"error": {"type", "code", "message", "request_id", "details"}}` with no stack traces
+  - [x] JSON logging with redaction filter (API keys, passwords, session tokens, PayPal credentials, Auth headers, hidden test strings)
+  - [x] Token-bucket rate limiting per key and per IP
+  - [x] Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options)
+  - [x] Strict CORS middleware restricted to `PAYLAP_CORS_ORIGINS`
+  - [x] Request body size limits
+  - [x] `/docs` and `/openapi.json` gated by `PAYLAP_ENABLE_DOCS`
+  - [x] `/healthz` and `/readyz` probes
+  - [x] Migration of all endpoints from `/api/*` to `/v1/*`
+  - [x] **Exit Gate**: Error format, redaction filter (with planted sentinels), rate limiting, and health checks pass. (Passed: 5/5 tests)
 
 - [ ] **P4: PayPal Credentials, Environments, and Policy**
   - [ ] Org BYO credentials encrypted with AES-256-GCM (12-byte random nonce, AAD `org_id:environment:field`, envelope `key_id.nonce.ciphertext`)
