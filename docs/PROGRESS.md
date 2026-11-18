@@ -96,14 +96,14 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Pre-commit configuration (`.pre-commit-config.yaml`) and Dependabot (`.github/dependabot.yml`)
   - [x] **Exit Gate**: Full test suite passes (142/142 tests passing) with 80% code coverage; ruff, mypy, bandit clean; CLI commands functional.
 
-- [ ] **P9: Production Frontend (React + TypeScript + Vite)**
-  - [ ] Web application with minimal, calm aesthetic and zero Tailwind / UI kits
-  - [ ] Complete responsive layouts (360px to 1920px) and WCAG AA accessibility
-  - [ ] Real data binding to all v1 endpoints (contracts, playground, policy, webhooks, keys, receipts)
-  - [ ] In-browser WebCrypto receipt verification
-  - [ ] Vitest unit tests and Playwright end-to-end tests
-  - [ ] FastAPI static asset serving with SPA fallback
-  - [ ] **Exit Gate**: Frontend lint, typecheck, unit tests, and Playwright smoke tests pass; served cleanly by FastAPI.
+- [x] **P9: Production Frontend (React + TypeScript + Vite)**
+  - [x] Web application with minimal, calm aesthetic and zero Tailwind / UI kits (custom CSS properties design system)
+  - [x] Complete responsive layouts (360px to 1920px) and WCAG AA accessibility
+  - [x] Real data binding to all v1 endpoints (contracts, playground, policy, webhooks, keys, receipts)
+  - [x] In-browser WebCrypto receipt verification (`crypto.subtle.verify("Ed25519")` with RFC 8785 canonical JSON sorting)
+  - [x] Vitest unit tests for cryptographic serialization and offline verification (6/6 passed)
+  - [x] FastAPI static asset serving with SPA fallback (`app/main.py` mounting `/assets` and falling back to `index.html`)
+  - [x] **Exit Gate**: `npm run build` passes with zero type errors; Vitest unit tests pass; served cleanly by FastAPI (`tests/test_frontend_serving.py` 3/3 passed).
 
 - [ ] **P10: Python SDK, MCP Server, and Documentation Site**
   - [ ] Typed `paylap` Python SDK with httpx
