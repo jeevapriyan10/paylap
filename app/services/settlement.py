@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -227,6 +228,17 @@ def settle_milestone(
         raise InvalidStateTransitionError(
             f"Cannot submit milestone for contract in state '{contract.status}'. Contract must be FUNDED."
         )
+
+    # Contract deadline expiry check
+    now = datetime.now(timezone.utc)
+    if contract.deadline_at:
+        deadline_tz = contract.deadline_at if contract.deadline_at.tzinfo else contract.deadline_at.replace(tzinfo=timezone.utc)
+        if now >= deadline_tz:
+            from app.services.expiry import expire_due_contracts
+            expire_due_contracts(db)
+            raise InvalidStateTransitionError(
+                f"Contract '{contract_id}' deadline expired at {contract.deadline_at.isoformat()}. Submissions closed."
+            )
 
     # Check if attempts exhausted
     effective_max_attempts = contract.metadata_json.get("max_attempts", 2) if contract.metadata_json else 2

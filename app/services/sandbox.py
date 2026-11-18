@@ -42,6 +42,7 @@ BANNED_MODULES = {
     "signal",
     "pathlib",
     "builtins",
+    "inspect",
 }
 
 BANNED_CALLS = {

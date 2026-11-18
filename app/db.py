@@ -37,6 +37,14 @@ SessionMigrate = sessionmaker(
 Base = declarative_base()
 
 
+def set_tenant_org(db: Session, org_id: str) -> None:
+    """Sets PostgreSQL session variable app.current_org for RLS enforcement."""
+    db.execute(
+        text("SELECT set_config('app.current_org', :org_id, false)"),
+        {"org_id": org_id},
+    )
+
+
 @contextmanager
 def org_session(org_id: str) -> Generator[Session, None, None]:
     """

@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict, Optional, Tuple
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from app.db import set_tenant_org
 from app.ids import generate_id
 from app.models import Contract, Event, OrgAuditLog, utc_now
 

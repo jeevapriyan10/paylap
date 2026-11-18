@@ -85,6 +85,15 @@ class Principal:
             )
 
 
+def require_principal(required_scope: Optional[str] = None):
+    """FastAPI dependency yielding an authenticated Principal with an enforced scope."""
+    def dependency(principal: Principal = Depends(get_current_principal)) -> Principal:
+        if required_scope:
+            principal.require_scope(required_scope)
+        return principal
+    return dependency
+
+
 # ==============================================================================
 # LOGIN THROTTLING & HELPERS
 # ==============================================================================

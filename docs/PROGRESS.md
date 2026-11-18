@@ -79,15 +79,15 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Hardened `ProcessRunner` (static AST screening, scrubbed env, timeout killing) and `RemoteRunner` (TLS client)
   - [x] **Exit Gate**: 50 concurrent appends yield gapless valid chain; tampering detected; offline receipt verification passes; runner isolation proven. (Passed: 6/6 tests, 39/39 total)
 
-- [ ] **P7: Background Jobs, Webhooks, Reconciliation, Stream, Playground**
-  - [ ] Job scheduler with advisory lock leader election
-  - [ ] Outbound webhooks with HMAC signatures, exponential backoff, and SSRF protection
-  - [ ] Inbound PayPal webhook ingestion and contradiction detection
-  - [ ] Daily and on-demand PayPal reconciliation
-  - [ ] Org-scoped SSE `/v1/stream` with heartbeats and reconnection
-  - [ ] Red Team Arena 6 scenarios under `/v1/playground`
-  - [ ] Org-level statistics and worker reputation
-  - [ ] **Exit Gate**: Webhook signatures, retry schedule, SSRF protection, inbound deduplication, reconciliation discrepancy tests, and 6/6 playground runs pass.
+- [x] **P7: Background Jobs, Webhooks, Reconciliation, Stream, Playground**
+  - [x] Job scheduler with advisory lock leader election (`SELECT pg_try_advisory_lock(hashtext('paylap:job_leader'))`)
+  - [x] Outbound webhooks with HMAC-SHA256 signatures (`PayLap-Signature`), exponential backoff schedule (1m, 5m, 30m, 2h, 5h), and strict SSRF protection
+  - [x] Inbound PayPal webhook ingestion with deduplication and contradiction detection (flags `needs_attention=true` without state corruption)
+  - [x] Daily and on-demand PayPal reconciliation (`POST /v1/reconcile`) detecting ledger discrepancies
+  - [x] Org-scoped SSE `/v1/stream` with heartbeats (`: ping\n\n`), sequence cursors, and `Last-Event-ID` reconnection
+  - [x] Red Team Arena 6 scenarios under `/v1/playground` (prompt injection bypass, AST escape, infinite loop, time-travel expiry, hidden test probe, concurrent race double-spend)
+  - [x] Aggregated platform statistics (`GET /v1/org/stats`) and worker reputation (`GET /v1/workers/{worker_id}/stats`)
+  - [x] **Exit Gate**: Webhook signatures, retry schedule, SSRF protection, inbound deduplication, reconciliation discrepancy tests, and 6/6 playground runs pass. (Passed: 9/9 tests, 48/48 total)
 
 - [ ] **P8: OpenAPI, CLI, and CI/CD Automation**
   - [ ] OpenAPI export script and schema verification

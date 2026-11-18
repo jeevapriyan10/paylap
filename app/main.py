@@ -10,7 +10,23 @@ from app.middleware.body_limit import BodyLimitMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import arena, auth, contracts, health, org_paypal, policy, receipts, stream, system, workers
+from app.routers import (
+    arena,
+    auth,
+    contracts,
+    health,
+    org_paypal,
+    playground,
+    policy,
+    receipts,
+    reconcile,
+    stats,
+    stream,
+    system,
+    webhooks,
+    workers,
+)
+from app.services.scheduler import scheduler
 
 # Initialize structured logging
 configure_logging()
@@ -19,7 +35,11 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Schema migrations run exclusively through Alembic; the application never calls create_all
+    if settings.PAYLAP_JOBS_ENABLED:
+        scheduler.start()
     yield
+    if settings.PAYLAP_JOBS_ENABLED:
+        await scheduler.stop()
 
 
 app = FastAPI(
@@ -62,7 +82,11 @@ app.include_router(org_paypal.router)
 app.include_router(policy.router)
 app.include_router(contracts.router)
 app.include_router(receipts.router)
+app.include_router(webhooks.router)
+app.include_router(reconcile.router)
+app.include_router(stats.router)
 app.include_router(workers.router)
+app.include_router(playground.router)
 app.include_router(arena.router)
 app.include_router(stream.router)
 app.include_router(system.router)
