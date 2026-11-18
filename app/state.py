@@ -9,6 +9,7 @@ class ContractStatus(str, Enum):
     COMPLETED = "COMPLETED"
     VOIDED = "VOIDED"
     CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
     BLOCKED = "BLOCKED"
     ERROR = "ERROR"
 
@@ -38,16 +39,19 @@ CONTRACT_TRANSITIONS = {
     ContractStatus.AWAITING_FUNDING: {
         ContractStatus.FUNDED,
         ContractStatus.CANCELLED,
+        ContractStatus.EXPIRED,
         ContractStatus.ERROR
     },
     ContractStatus.FUNDED: {
         ContractStatus.COMPLETED,
         ContractStatus.VOIDED,
+        ContractStatus.EXPIRED,
         ContractStatus.ERROR
     },
     ContractStatus.COMPLETED: {ContractStatus.ERROR},
     ContractStatus.VOIDED: {ContractStatus.ERROR},
     ContractStatus.CANCELLED: {ContractStatus.ERROR},
+    ContractStatus.EXPIRED: {ContractStatus.ERROR},
     ContractStatus.BLOCKED: {ContractStatus.ERROR},
     ContractStatus.ERROR: set(),
 }

@@ -1,8 +1,9 @@
+import json
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import List, Optional
-import re
-from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def cents_to_usd_str(cents: int) -> str:
@@ -22,7 +23,6 @@ def usd_str_to_cents(amount_str: str) -> int:
         raise TypeError(f"Amount must be a string representation of currency, got {type(amount_str).__name__}")
 
     amount_clean = amount_str.strip()
-    # Matches positive decimal numbers with optional 1 or 2 decimal digits: e.g. "5", "5.0", "5.00"
     if not re.match(r"^\d+(\.\d{1,2})?$", amount_clean):
         raise ValueError(f"Invalid USD amount format '{amount_str}'. Must be a positive decimal string with up to 2 decimal places.")
 
@@ -40,27 +40,44 @@ def usd_str_to_cents(amount_str: str) -> int:
 
 class MilestoneCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    amount: str = Field(..., description="USD amount as string, e.g. '2.50'")
+    amount: Optional[str] = Field(None, description="USD amount as string, e.g. '2.50'")
+    amount_minor: Optional[int] = Field(None, description="Integer minor units (cents)")
+    amount_cents: Optional[int] = Field(None, description="Alias for amount_minor")
     spec: str = Field(..., min_length=1, description="Task specification and requirements")
     public_tests: str = Field(..., min_length=1, description="Public test suite run against submitted solution")
     hidden_tests: Optional[str] = Field(None, description="Optional hidden test suite (never returned in responses)")
     verifier_type: str = Field("python_code", description="Verifier plugin name: python_code, json_data, text_rules")
-    verifier_config: Optional[dict] = Field(None, description="Optional configuration for verifiers (schema, word counts, regex rules)")
+    verifier_config: Optional[dict] = Field(None, description="Optional configuration for verifiers")
 
-    @field_validator("amount")
-    @classmethod
-    def validate_amount(cls, v: str) -> str:
-        cents = usd_str_to_cents(v)
-        return cents_to_usd_str(cents)
+    @model_validator(mode="after")
+    def resolve_amount_cents(self) -> "MilestoneCreate":
+        if self.amount_minor is not None:
+            cents = self.amount_minor
+        elif self.amount_cents is not None:
+            cents = self.amount_cents
+        elif self.amount is not None:
+            cents = usd_str_to_cents(self.amount)
+        else:
+            raise ValueError("Milestone must have either 'amount_minor', 'amount_cents', or 'amount' (USD string)")
+        
+        self.amount_minor = cents
+        self.amount_cents = cents
+        self.amount = cents_to_usd_str(cents)
+        return self
 
 
 class ContractCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
-    buyer_id: str = Field(..., min_length=1, max_length=128)
+    buyer_id: Optional[str] = Field(None, max_length=128)
     worker_id: str = Field(..., min_length=1, max_length=128)
     worker_email: str = Field(..., min_length=3, max_length=255)
-    milestones: List[MilestoneCreate] = Field(default_factory=list)
-    max_attempts: int = Field(1, ge=1, le=10)
+    environment: str = Field("simulated", pattern="^(simulated|sandbox|live|demo)$")
+    deadline_at: Optional[datetime] = None
+    external_reference: Optional[str] = Field(None, max_length=255)
+    metadata: Optional[Dict[str, Any]] = None
+    capture_strategy: str = Field("partial", pattern="^(partial|batch_at_end)$")
+    milestones: List[MilestoneCreate] = Field(..., min_length=1, max_length=5)
+    max_attempts: int = Field(2, ge=1, le=10)
 
     @field_validator("worker_email")
     @classmethod
@@ -69,6 +86,17 @@ class ContractCreate(BaseModel):
         if "@" not in v_clean or "." not in v_clean.split("@")[-1]:
             raise ValueError(f"Invalid email address '{v}'")
         return v_clean
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if v is not None:
+            if len(v) > 16:
+                raise ValueError("Contract metadata cannot exceed 16 keys")
+            serialized = json.dumps(v)
+            if len(serialized.encode("utf-8")) > 4096:
+                raise ValueError("Contract metadata cannot exceed 4 KB")
+        return v
 
 
 class MilestoneResponse(BaseModel):
@@ -104,14 +132,27 @@ class ContractResponse(BaseModel):
     total_usd: str
     currency: str
     status: str
+    environment: str = "simulated"
     paypal_order_id: Optional[str] = None
     paypal_authorization_id: Optional[str] = None
+    authorization_expires_at: Optional[datetime] = None
     approve_url: Optional[str] = None
-    mode: str
+    mode: str = "demo"
     max_attempts: int
+    capture_strategy: str = "partial"
+    external_reference: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    hidden_commitment: Optional[str] = None
     milestones: List[MilestoneResponse]
     created_at: datetime
     updated_at: datetime
+
+
+class PaginatedContractsResponse(BaseModel):
+    items: List[ContractResponse]
+    next_cursor: Optional[str] = None
+    has_more: bool = False
+    total: Optional[int] = None
 
 
 class MilestoneSubmit(BaseModel):
@@ -135,7 +176,7 @@ class MilestoneOutcome(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "0.2.0"
+    version: str = "1.0.0"
     mode: str
     payout_mode: str
     arbiter_mode: str

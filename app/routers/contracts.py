@@ -1,22 +1,31 @@
+import hashlib
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
+from app.ids import generate_id
 from app.ledger import append_event
-from app.models import Contract, Milestone, Event, generate_short_id
+from app.models import Contract, Milestone, Event, Organization
+from app.routers.auth import Principal, get_current_principal
 from app.schemas import (
     ContractCreate,
     ContractResponse,
     MilestoneOutcome,
     MilestoneResponse,
     MilestoneSubmit,
+    PaginatedContractsResponse,
     cents_to_usd_str,
-    usd_str_to_cents,
 )
-from app.services.policy import mask_email, validate_spend_policy
-from app.services.settlement import get_paypal_provider, settle_milestone
+from app.services.idempotency import check_idempotency_key, store_idempotency_key
+from app.services.pagination import decode_cursor, encode_cursor
+from app.services.paypal_factory import get_provider
+from app.services.policy import evaluate_spend_policy, mask_email
+from app.services.settlement import settle_milestone
+from app.services.state_tokens import create_signed_funding_state, verify_signed_funding_state
 from app.state import (
     ContractStatus,
     InvalidStateTransitionError,
@@ -26,43 +35,70 @@ from app.state import (
 router = APIRouter(prefix="/v1/contracts", tags=["Contracts"])
 
 
+def set_tenant_org(db: Session, org_id: str) -> None:
+    """Set app.current_org on the Postgres transaction for Row-Level Security."""
+    db.execute(text("SELECT set_config('app.current_org', :org_id, true)"), {"org_id": org_id})
+
+
+def sanitize_verifier_config(config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Strictly sanitize verifier configuration so hidden tests are never leaked."""
+    if not config:
+        return None
+    sanitized = dict(config)
+    for sensitive_key in ("hidden_tests", "hidden_checks", "secret", "private", "private_tests"):
+        sanitized.pop(sensitive_key, None)
+    return sanitized
+
+
 def format_contract_response(contract: Contract) -> ContractResponse:
     milestones_resp = [
         MilestoneResponse(
             id=m.id,
-            idx=m.idx,
+            idx=m.sequence,
             title=m.title,
             amount_cents=m.amount_cents,
             amount_usd=cents_to_usd_str(m.amount_cents),
             spec=m.spec,
             public_tests=m.public_tests,
-            verifier_type=getattr(m, "verifier_type", "python_code") or "python_code",
-            verifier_config=getattr(m, "verifier_config", None),
+            verifier_type=m.verifier_type or "python_code",
+            verifier_config=sanitize_verifier_config(m.verifier_config),
             status=m.status,
-            attempts=m.attempts,
+            attempts=m.attempts_count,
             capture_id=m.capture_id,
-            payout_batch_id=m.payout_batch_id,
+            payout_batch_id=m.payout_id,
             payout_status=m.payout_status,
             paid_at=m.paid_at,
         )
-        for m in sorted(contract.milestones, key=lambda x: x.idx)
+        for m in sorted(contract.milestones, key=lambda x: x.sequence)
     ]
+
+    effective_max_attempts = (
+        contract.metadata_json.get("max_attempts", 2)
+        if contract.metadata_json and isinstance(contract.metadata_json, dict)
+        else 2
+    )
 
     return ContractResponse(
         id=contract.id,
         title=contract.title,
-        buyer_id=contract.buyer_id,
+        buyer_id=contract.org_id,
         worker_id=contract.worker_id,
         worker_email=contract.worker_email,
         total_cents=contract.total_cents,
         total_usd=cents_to_usd_str(contract.total_cents),
         currency=contract.currency,
         status=contract.status,
+        environment=contract.environment,
         paypal_order_id=contract.paypal_order_id,
         paypal_authorization_id=contract.paypal_authorization_id,
+        authorization_expires_at=contract.authorization_expires_at,
         approve_url=contract.approve_url,
         mode=contract.mode,
-        max_attempts=contract.max_attempts,
+        max_attempts=effective_max_attempts,
+        capture_strategy=contract.capture_strategy or "partial",
+        external_reference=contract.external_reference,
+        metadata=contract.metadata_json,
+        hidden_commitment=contract.hidden_commitment,
         milestones=milestones_resp,
         created_at=contract.created_at,
         updated_at=contract.updated_at,
@@ -72,70 +108,137 @@ def format_contract_response(contract: Contract) -> ContractResponse:
 @router.post("", response_model=ContractResponse, status_code=201)
 def create_contract(
     payload: ContractCreate,
+    principal: Principal = Depends(get_current_principal),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db)
 ):
     """
     Create a new milestone contract and initialize PayPal escrow order.
-    In Demo mode, the contract is automatically funded.
-    In Live mode, status is AWAITING_FUNDING with an approval URL for the buyer.
+    Enforces Row-Level Security, spend policies, hidden test commitments, and idempotency.
     """
-    import hashlib
+    principal.require_scope("contracts:write")
+    set_tenant_org(db, principal.org_id)
 
-    mode = settings.PAYLAP_MODE
-    is_simulated = (mode == "demo")
-    provider = get_paypal_provider(mode)
+    # Environment class validation for API keys
+    if principal.is_api_key:
+        if payload.environment == "live" and principal.env_class != "live":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Test API keys cannot create live contracts",
+            )
+        if payload.environment != "live" and principal.env_class == "live":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Live API keys cannot create non-live contracts",
+            )
 
-    contract_id = generate_short_id()
+    # Check idempotency
+    payload_dict = payload.model_dump(mode="json")
+    cached = check_idempotency_key(
+        db=db,
+        org_id=principal.org_id,
+        idempotency_key=idempotency_key,
+        method="POST",
+        path="/v1/contracts",
+        body=payload_dict,
+    )
+    if cached:
+        c_code, c_body, c_headers = cached
+        return JSONResponse(status_code=c_code, content=c_body, headers=c_headers)
 
-    # Calculate total cents exactly from milestone amounts
-    milestone_cents = [usd_str_to_cents(m.amount) for m in payload.milestones]
+    # Deadline validation
+    now = datetime.now(timezone.utc)
+    contract_days = None
+    if payload.deadline_at:
+        deadline = payload.deadline_at if payload.deadline_at.tzinfo else payload.deadline_at.replace(tzinfo=timezone.utc)
+        if deadline <= now:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Contract deadline must be in the future",
+            )
+        max_days = settings.PAYLAP_MAX_CONTRACT_DAYS
+        if deadline > now + timedelta(days=max_days):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Contract deadline exceeds maximum allowed days ({max_days})",
+            )
+        contract_days = (deadline - now).days
+
+    contract_id = generate_id("ctr")
+    is_simulated = (payload.environment == "simulated")
+
+    # Compute amounts
+    milestone_cents = [m.amount_minor for m in payload.milestones]
     total_cents = sum(milestone_cents)
 
-    # Pre-transaction spend policy check (before PayPal is touched)
-    allowed, violations = validate_spend_policy(
-        db=db,
-        buyer_id=payload.buyer_id,
-        worker_email=payload.worker_email,
-        total_cents=total_cents,
-        milestone_count=len(payload.milestones),
+    # Hidden test commitment hashes (stored internally, never returned in responses)
+    hidden_commitments = []
+    for m in payload.milestones:
+        h_str = (m.hidden_tests or "").strip()
+        if h_str:
+            h_commit = hashlib.sha256(h_str.encode("utf-8")).hexdigest()
+        else:
+            h_commit = None
+        hidden_commitments.append(h_commit)
+
+    overall_h_commit = (
+        hashlib.sha256("".join(c for c in hidden_commitments if c).encode("utf-8")).hexdigest()
+        if any(hidden_commitments) else None
     )
+
+    # Spend policy evaluation
+    allowed, violations = evaluate_spend_policy(
+        db=db,
+        org_id=principal.org_id,
+        environment=payload.environment,
+        total_cents=total_cents,
+        milestones=[m.model_dump() for m in payload.milestones],
+        worker_email=payload.worker_email,
+        deadline_at=payload.deadline_at,
+    )
+
     if not allowed:
-        contract = Contract(
+        blocked_contract = Contract(
             id=contract_id,
+            org_id=principal.org_id,
             title=payload.title,
-            buyer_id=payload.buyer_id,
             worker_id=payload.worker_id,
             worker_email=payload.worker_email,
+            environment=payload.environment,
             total_cents=total_cents,
             currency="USD",
             status=ContractStatus.BLOCKED.value,
-            mode=mode,
-            max_attempts=payload.max_attempts,
+            deadline_at=payload.deadline_at,
+            external_reference=payload.external_reference,
+            metadata_json=payload.metadata,
+            capture_strategy=payload.capture_strategy,
+            hidden_commitment=overall_h_commit,
         )
-        db.add(contract)
+        db.add(blocked_contract)
         db.commit()
-        db.refresh(contract)
 
         append_event(
             db,
             event_type="POLICY_BLOCKED",
             payload={
-                "contract_id": contract.id,
-                "buyer_id": contract.buyer_id,
-                "worker_email": mask_email(contract.worker_email),
+                "contract_id": contract_id,
+                "buyer_id": principal.org_id,
+                "worker_email": mask_email(payload.worker_email),
                 "total_cents": total_cents,
                 "violations": violations,
             },
-            contract_id=contract.id,
+            contract_id=contract_id,
+            org_id=principal.org_id,
             simulated=is_simulated,
         )
+        db.commit()
 
         return JSONResponse(
             status_code=422,
             content={
                 "error": "Policy violation",
                 "violations": violations,
-                "contract_id": contract.id,
+                "contract_id": contract_id,
                 "detail": {
                     "error": "Policy violation",
                     "violations": violations,
@@ -143,56 +246,45 @@ def create_contract(
             },
         )
 
+    # Initialize Contract record
     contract = Contract(
         id=contract_id,
+        org_id=principal.org_id,
         title=payload.title,
-        buyer_id=payload.buyer_id,
         worker_id=payload.worker_id,
         worker_email=payload.worker_email,
+        environment=payload.environment,
         total_cents=total_cents,
         currency="USD",
         status=ContractStatus.CREATED.value,
-        mode=mode,
-        max_attempts=payload.max_attempts,
+        deadline_at=payload.deadline_at,
+        external_reference=payload.external_reference,
+        metadata_json={**(payload.metadata or {}), "max_attempts": payload.max_attempts},
+        capture_strategy=payload.capture_strategy,
+        hidden_commitment=overall_h_commit,
     )
     db.add(contract)
 
-    hidden_commitments = []
-    for idx, (m_spec, cents) in enumerate(zip(payload.milestones, milestone_cents), start=1):
-        hidden_parts = []
-        if m_spec.hidden_tests:
-            hidden_parts.append(m_spec.hidden_tests)
-        if m_spec.verifier_config and "hidden_tests" in m_spec.verifier_config:
-            hidden_parts.append(str(m_spec.verifier_config["hidden_tests"]))
-
-        h_commit = (
-            hashlib.sha256("".join(hidden_parts).encode("utf-8")).hexdigest()
-            if hidden_parts else None
-        )
-        hidden_commitments.append(h_commit)
-
+    # Add milestones
+    for idx, (m_spec, cents, h_commit) in enumerate(zip(payload.milestones, milestone_cents, hidden_commitments), start=1):
         milestone = Milestone(
-            id=generate_short_id(),
+            id=generate_id("mst"),
+            org_id=principal.org_id,
             contract_id=contract_id,
-            idx=idx,
+            sequence=idx,
             title=m_spec.title,
             amount_cents=cents,
             spec=m_spec.spec,
             public_tests=m_spec.public_tests,
-            hidden_tests=m_spec.hidden_tests,  # Stored internally, never exposed via API
+            hidden_tests=m_spec.hidden_tests,  # Stored securely, never exposed in API responses
             verifier_type=m_spec.verifier_type or "python_code",
             verifier_config=m_spec.verifier_config,
-            hidden_commitment=h_commit,
+            hidden_commitment_hash=h_commit,
             status="PENDING",
-            attempts=0,
+            attempts_count=0,
+            max_attempts=payload.max_attempts,
         )
         db.add(milestone)
-
-    overall_h_commit = (
-        hashlib.sha256("".join(c for c in hidden_commitments if c).encode("utf-8")).hexdigest()
-        if any(hidden_commitments) else None
-    )
-    contract.hidden_commitment = overall_h_commit
 
     db.commit()
     db.refresh(contract)
@@ -208,19 +300,24 @@ def create_contract(
             "milestone_count": len(payload.milestones),
             "hidden_commitments": hidden_commitments,
             "hidden_commitment": overall_h_commit,
-            "mode": mode,
+            "environment": payload.environment,
         },
         contract_id=contract.id,
+        org_id=principal.org_id,
         simulated=is_simulated,
     )
 
-    if mode == "demo":
+    # Resolve provider
+    org = db.scalar(select(Organization).where(Organization.id == principal.org_id))
+    provider = get_provider(org, payload.environment, db)
+
+    if payload.environment == "simulated":
         # Auto-fund simulated order
         order_res = provider.create_escrow_order(
             contract_id=contract.id,
             amount_cents=total_cents,
-            return_url=f"{settings.PAYLAP_PUBLIC_URL}/api/contracts/{contract.id}/funding/return",
-            cancel_url=f"{settings.PAYLAP_PUBLIC_URL}/api/contracts/{contract.id}/funding/cancel",
+            return_url=f"{settings.PAYLAP_PUBLIC_URL}/v1/contracts/{contract.id}/funding/return",
+            cancel_url=f"{settings.PAYLAP_PUBLIC_URL}/v1/contracts/{contract.id}/funding/cancel",
         )
         contract.paypal_order_id = order_res.get("order_id")
 
@@ -229,6 +326,7 @@ def create_contract(
             event_type="ORDER_CREATED",
             payload={"order_id": contract.paypal_order_id, "amount_cents": total_cents},
             contract_id=contract.id,
+            org_id=principal.org_id,
             simulated=True,
         )
 
@@ -240,6 +338,7 @@ def create_contract(
             event_type="ORDER_AUTHORIZED",
             payload={"authorization_id": contract.paypal_authorization_id},
             contract_id=contract.id,
+            org_id=principal.org_id,
             simulated=True,
         )
 
@@ -251,14 +350,16 @@ def create_contract(
             event_type="CONTRACT_FUNDED",
             payload={"contract_id": contract.id, "authorization_id": contract.paypal_authorization_id},
             contract_id=contract.id,
+            org_id=principal.org_id,
             simulated=True,
         )
         db.commit()
 
     else:
-        # Live mode: Create PayPal order and obtain buyer approval redirect URL
-        return_url = f"{settings.PAYLAP_PUBLIC_URL}/api/contracts/{contract.id}/funding/return"
-        cancel_url = f"{settings.PAYLAP_PUBLIC_URL}/api/contracts/{contract.id}/funding/cancel"
+        # Sandbox or Live: Create PayPal order with signed state token URLs
+        state_token = create_signed_funding_state(contract.id, principal.org_id)
+        return_url = f"{settings.PAYLAP_PUBLIC_URL}/v1/contracts/{contract.id}/funding/return?state={state_token}"
+        cancel_url = f"{settings.PAYLAP_PUBLIC_URL}/v1/contracts/{contract.id}/funding/cancel?state={state_token}"
 
         try:
             order_res = provider.create_escrow_order(
@@ -283,6 +384,7 @@ def create_contract(
                     "amount_cents": total_cents,
                 },
                 contract_id=contract.id,
+                org_id=principal.org_id,
                 simulated=False,
             )
             db.commit()
@@ -293,46 +395,114 @@ def create_contract(
                 event_type="ORDER_CREATION_FAILED",
                 payload={"error": str(exc)},
                 contract_id=contract.id,
+                org_id=principal.org_id,
                 simulated=False,
             )
             db.commit()
             raise HTTPException(status_code=502, detail=f"Failed to create PayPal escrow order: {exc}")
 
     db.refresh(contract)
-    return format_contract_response(contract)
+    resp = format_contract_response(contract)
+
+    if idempotency_key:
+        store_idempotency_key(
+            db=db,
+            org_id=principal.org_id,
+            idempotency_key=idempotency_key,
+            method="POST",
+            path="/v1/contracts",
+            body=payload_dict,
+            response_code=201,
+            response_body=resp.model_dump(mode="json"),
+        )
+
+    return resp
 
 
-@router.get("", response_model=List[ContractResponse])
-def list_contracts(db: Session = Depends(get_db)):
-    """List all contracts."""
-    contracts = db.query(Contract).order_by(Contract.created_at.desc()).all()
-    return [format_contract_response(c) for c in contracts]
+@router.get("", response_model=PaginatedContractsResponse)
+def list_contracts(
+    cursor: Optional[str] = Query(None, description="Opaque pagination cursor"),
+    limit: int = Query(20, ge=1, le=100, description="Page limit"),
+    environment: Optional[str] = Query(None, description="Filter by environment"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    worker_id: Optional[str] = Query(None, description="Filter by worker_id"),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """
+    List contracts with cursor-based pagination and filtering.
+    Enforces Row-Level Security for the authenticated organization.
+    """
+    principal.require_scope("contracts:read")
+    set_tenant_org(db, principal.org_id)
+
+    stmt = select(Contract).where(Contract.org_id == principal.org_id)
+
+    if environment:
+        stmt = stmt.where(Contract.environment == environment)
+    if status:
+        stmt = stmt.where(Contract.status == status)
+    if worker_id:
+        stmt = stmt.where(Contract.worker_id == worker_id)
+
+    if cursor:
+        cursor_dt, cursor_id = decode_cursor(cursor)
+        if cursor_dt and cursor_id:
+            stmt = stmt.where(
+                (Contract.created_at < cursor_dt) |
+                ((Contract.created_at == cursor_dt) & (Contract.id < cursor_id))
+            )
+
+    stmt = stmt.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(limit + 1)
+    results = db.scalars(stmt).all()
+
+    has_more = len(results) > limit
+    items = results[:limit]
+
+    next_cursor = None
+    if has_more and items:
+        last_item = items[-1]
+        next_cursor = encode_cursor(last_item.created_at, last_item.id)
+
+    return PaginatedContractsResponse(
+        items=[format_contract_response(c) for c in items],
+        next_cursor=next_cursor,
+        has_more=has_more,
+    )
 
 
 @router.get("/{contract_id}")
-def get_contract_detail(contract_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_contract_detail(
+    contract_id: str,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
     """
-    Get detailed contract information including milestones (without hidden_tests)
+    Get detailed contract information including milestones (never hidden_tests)
     and recent ledger events.
     """
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    principal.require_scope("contracts:read")
+    set_tenant_org(db, principal.org_id)
+
+    contract = db.scalar(
+        select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id)
+    )
     if not contract:
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
-    recent_events = (
-        db.query(Event)
-        .filter(Event.contract_id == contract_id)
+    recent_events = db.scalars(
+        select(Event)
+        .where(Event.contract_id == contract_id, Event.org_id == principal.org_id)
         .order_by(Event.seq.desc())
         .limit(20)
-        .all()
-    )
+    ).all()
 
     return {
         "contract": format_contract_response(contract),
         "recent_events": [
             {
                 "seq": e.seq,
-                "type": e.type,
+                "type": e.event_type,
                 "payload": e.payload,
                 "simulated": e.simulated,
                 "created_at": e.created_at.isoformat() if e.created_at else None,
@@ -346,13 +516,22 @@ def get_contract_detail(contract_id: str, db: Session = Depends(get_db)) -> Dict
 def funding_return_callback(
     contract_id: str,
     token: Optional[str] = Query(None, description="PayPal Order ID"),
-    db: Session = Depends(get_db)
+    state: Optional[str] = Query(None, description="Signed funding state token"),
+    db: Session = Depends(get_db),
 ):
     """
     Redirect endpoint called by PayPal when buyer approves authorization.
-    Authorizes the order in live mode and transitions contract to FUNDED.
+    Verifies cryptographic signed state token and transitions contract to FUNDED.
     """
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not state:
+        return HTMLResponse(status_code=400, content="<h3>Missing funding state token</h3>")
+
+    is_valid, state_cid, org_id = verify_signed_funding_state(state)
+    if not is_valid or state_cid != contract_id or not org_id:
+        return HTMLResponse(status_code=400, content="<h3>Invalid or expired funding state token</h3>")
+
+    set_tenant_org(db, org_id)
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == org_id))
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found.")
 
@@ -361,8 +540,8 @@ def funding_return_callback(
             content="""
             <html>
               <body style="font-family:sans-serif; text-align:center; padding:50px; background:#f0fdf4;">
-                <h1 style="color:#166534;">Escrow Already Funded!</h1>
-                <p>The escrow hold for this contract is already active. You can safely close this window.</p>
+                <h1 style="color:#166534;">Payment Hold Already Active</h1>
+                <p>The verified-delivery payment hold for this contract is already active.</p>
               </body>
             </html>
             """
@@ -372,17 +551,24 @@ def funding_return_callback(
     if not order_id:
         raise HTTPException(status_code=400, detail="Missing order ID token.")
 
-    provider = get_paypal_provider(contract.mode)
+    org = db.scalar(select(Organization).where(Organization.id == org_id))
+    provider = get_provider(org, contract.environment, db)
 
     try:
         auth_res = provider.authorize_order(order_id=order_id, request_id=f"auth-{contract.id}")
         contract.paypal_authorization_id = auth_res.get("authorization_id")
+        if auth_res.get("expiration_time"):
+            try:
+                contract.authorization_expires_at = datetime.fromisoformat(auth_res["expiration_time"].replace("Z", "+00:00"))
+            except Exception:
+                pass
 
         append_event(
             db,
             event_type="ORDER_AUTHORIZED",
             payload={"order_id": order_id, "authorization_id": contract.paypal_authorization_id},
             contract_id=contract.id,
+            org_id=contract.org_id,
             simulated=False,
         )
 
@@ -394,6 +580,7 @@ def funding_return_callback(
             event_type="CONTRACT_FUNDED",
             payload={"contract_id": contract.id, "authorization_id": contract.paypal_authorization_id},
             contract_id=contract.id,
+            org_id=contract.org_id,
             simulated=False,
         )
         db.commit()
@@ -404,6 +591,7 @@ def funding_return_callback(
             event_type="AUTHORIZATION_FAILED",
             payload={"order_id": order_id, "error": str(exc)},
             contract_id=contract.id,
+            org_id=contract.org_id,
             simulated=False,
         )
         db.commit()
@@ -412,8 +600,8 @@ def funding_return_callback(
             content=f"""
             <html>
               <body style="font-family:sans-serif; text-align:center; padding:50px; background:#fef2f2;">
-                <h1 style="color:#991b1b;">Escrow Authorization Failed</h1>
-                <p>Error authorizing PayPal escrow order: {exc}</p>
+                <h1 style="color:#991b1b;">Authorization Failed</h1>
+                <p>Error authorizing PayPal payment hold: {exc}</p>
               </body>
             </html>
             """
@@ -422,14 +610,14 @@ def funding_return_callback(
     return HTMLResponse(
         content="""
         <html>
-          <head><title>PayLap Escrow Funded</title></head>
+          <head><title>PayLap Hold Active</title></head>
           <body style="font-family:sans-serif; text-align:center; padding:50px; background:#f0fdf4;">
-            <h1 style="color:#166534;">Escrow Funded Successfully!</h1>
+            <h1 style="color:#166534;">Payment Hold Authorized Successfully!</h1>
             <p style="font-size:18px; color:#15803d;">
-              Funds are securely placed on hold in PayPal escrow.
+              Funds are securely placed on hold in your PayPal business account.
             </p>
             <p style="color:#4b5563;">
-              The worker agent may now submit work against the milestone specifications.<br>
+              The worker agent may now submit work against milestone specifications.<br>
               You may safely close this browser window.
             </p>
           </body>
@@ -439,26 +627,35 @@ def funding_return_callback(
 
 
 @router.get("/{contract_id}/funding/cancel", response_class=HTMLResponse)
-def funding_cancel_callback(contract_id: str, db: Session = Depends(get_db)):
-    """Called when buyer cancels approval on PayPal."""
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if contract and contract.status == ContractStatus.AWAITING_FUNDING.value:
-        transition_contract(contract.status, ContractStatus.CANCELLED)
-        contract.status = ContractStatus.CANCELLED.value
-        append_event(
-            db,
-            event_type="CONTRACT_CANCELLED",
-            payload={"contract_id": contract.id, "reason": "Buyer cancelled at PayPal checkout."},
-            contract_id=contract.id,
-            simulated=(contract.mode == "demo"),
-        )
-        db.commit()
+def funding_cancel_callback(
+    contract_id: str,
+    state: Optional[str] = Query(None, description="Signed funding state token"),
+    db: Session = Depends(get_db),
+):
+    """Called when buyer cancels approval at PayPal checkout."""
+    if state:
+        is_valid, state_cid, org_id = verify_signed_funding_state(state)
+        if is_valid and state_cid == contract_id and org_id:
+            set_tenant_org(db, org_id)
+            contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == org_id))
+            if contract and contract.status == ContractStatus.AWAITING_FUNDING.value:
+                transition_contract(contract.status, ContractStatus.CANCELLED)
+                contract.status = ContractStatus.CANCELLED.value
+                append_event(
+                    db,
+                    event_type="CONTRACT_CANCELLED",
+                    payload={"contract_id": contract.id, "reason": "Buyer cancelled at PayPal checkout."},
+                    contract_id=contract.id,
+                    org_id=contract.org_id,
+                    simulated=(contract.environment == "simulated"),
+                )
+                db.commit()
 
     return HTMLResponse(
         content="""
         <html>
           <body style="font-family:sans-serif; text-align:center; padding:50px; background:#fef2f2;">
-            <h1 style="color:#991b1b;">Escrow Funding Cancelled</h1>
+            <h1 style="color:#991b1b;">Payment Hold Cancelled</h1>
             <p>You cancelled the authorization on PayPal. The contract has been cancelled.</p>
           </body>
         </html>
@@ -471,12 +668,36 @@ def submit_milestone(
     contract_id: str,
     idx: int,
     payload: MilestoneSubmit,
+    principal: Principal = Depends(get_current_principal),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     db: Session = Depends(get_db)
 ):
     """
-    Submit a Python solution for a milestone.
-    Runs isolated sandbox tests, captures approved funds, and dispatches payout.
+    Submit work for a milestone.
+    Runs injection scan, isolated verifiers, fail-closed LLM arbiter veto layer, and capture/payouts.
     """
+    principal.require_scope("contracts:write")
+    set_tenant_org(db, principal.org_id)
+
+    # Check idempotency
+    submit_dict = payload.model_dump(mode="json")
+    cached = check_idempotency_key(
+        db=db,
+        org_id=principal.org_id,
+        idempotency_key=idempotency_key,
+        method="POST",
+        path=f"/v1/contracts/{contract_id}/milestones/{idx}/submit",
+        body=submit_dict,
+    )
+    if cached:
+        c_code, c_body, c_headers = cached
+        return JSONResponse(status_code=c_code, content=c_body, headers=c_headers)
+
+    # Verify contract exists for this org
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id))
+    if not contract:
+        raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
+
     try:
         outcome = settle_milestone(
             db=db,
@@ -484,6 +705,19 @@ def submit_milestone(
             milestone_idx=idx,
             code=payload.code
         )
+
+        if idempotency_key:
+            store_idempotency_key(
+                db=db,
+                org_id=principal.org_id,
+                idempotency_key=idempotency_key,
+                method="POST",
+                path=f"/v1/contracts/{contract_id}/milestones/{idx}/submit",
+                body=submit_dict,
+                response_code=200,
+                response_body=outcome.model_dump(mode="json"),
+            )
+
         return outcome
     except ValueError as val_err:
         raise HTTPException(status_code=404, detail=str(val_err))
@@ -494,16 +728,38 @@ def submit_milestone(
 
 
 @router.post("/{contract_id}/cancel", response_model=ContractResponse)
-def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
+def cancel_contract(
+    contract_id: str,
+    principal: Principal = Depends(get_current_principal),
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db)
+):
     """
     Buyer cancellation: voids remaining hold if funded, or marks cancelled if awaiting funding.
     """
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    principal.require_scope("contracts:write")
+    set_tenant_org(db, principal.org_id)
+
+    # Check idempotency
+    cached = check_idempotency_key(
+        db=db,
+        org_id=principal.org_id,
+        idempotency_key=idempotency_key,
+        method="POST",
+        path=f"/v1/contracts/{contract_id}/cancel",
+        body=None,
+    )
+    if cached:
+        c_code, c_body, c_headers = cached
+        return JSONResponse(status_code=c_code, content=c_body, headers=c_headers)
+
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id))
     if not contract:
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 
-    provider = get_paypal_provider(contract.mode)
-    is_simulated = (contract.mode == "demo")
+    org = db.scalar(select(Organization).where(Organization.id == principal.org_id))
+    provider = get_provider(org, contract.environment, db)
+    is_simulated = (contract.environment == "simulated")
 
     if contract.status == ContractStatus.FUNDED.value:
         if contract.paypal_authorization_id:
@@ -517,6 +773,7 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
                     event_type="AUTHORIZATION_VOIDED",
                     payload={"authorization_id": contract.paypal_authorization_id, "reason": "Buyer cancellation"},
                     contract_id=contract.id,
+                    org_id=principal.org_id,
                     simulated=is_simulated
                 )
             except Exception as exc:
@@ -525,6 +782,7 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
                     event_type="VOID_ERROR",
                     payload={"error": str(exc)},
                     contract_id=contract.id,
+                    org_id=principal.org_id,
                     simulated=is_simulated
                 )
 
@@ -535,6 +793,7 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
             event_type="CONTRACT_VOIDED",
             payload={"reason": "Cancelled by buyer."},
             contract_id=contract.id,
+            org_id=principal.org_id,
             simulated=is_simulated
         )
 
@@ -546,6 +805,7 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
             event_type="CONTRACT_CANCELLED",
             payload={"reason": "Cancelled by buyer before funding."},
             contract_id=contract.id,
+            org_id=principal.org_id,
             simulated=is_simulated
         )
     else:
@@ -556,18 +816,36 @@ def cancel_contract(contract_id: str, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(contract)
-    return format_contract_response(contract)
+    resp = format_contract_response(contract)
+
+    if idempotency_key:
+        store_idempotency_key(
+            db=db,
+            org_id=principal.org_id,
+            idempotency_key=idempotency_key,
+            method="POST",
+            path=f"/v1/contracts/{contract_id}/cancel",
+            body=None,
+            response_code=200,
+            response_body=resp.model_dump(mode="json"),
+        )
+
+    return resp
 
 
 @router.get("/{contract_id}/receipt")
 def get_contract_receipt(
     contract_id: str,
+    principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """Generate and return a signed, tamper-evident cryptographic receipt for the contract."""
     from app.services.receipts import generate_receipt
 
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    principal.require_scope("receipts:read")
+    set_tenant_org(db, principal.org_id)
+
+    contract = db.scalar(select(Contract).where(Contract.id == contract_id, Contract.org_id == principal.org_id))
     if not contract:
         raise HTTPException(status_code=404, detail=f"Contract '{contract_id}' not found.")
 

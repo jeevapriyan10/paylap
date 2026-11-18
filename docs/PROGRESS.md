@@ -57,17 +57,18 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Per-org spend policies (max task amount, daily spend cap, max milestones, worker allowlist, require hidden tests)
   - [x] **Exit Gate**: Encryption round-trip, wrong-AAD failure, key rotation, live-disabled-by-default, and policy enforcement tests pass. (Passed: 5/5 tests)
 
-- [ ] **P5: Contract Engine V1**
-  - [ ] Contract & milestone schemas with verifiers (`python_code`, `json_data`, `text_rules`)
-  - [ ] Hidden test commitment hashes recorded at creation
-  - [ ] Prompt injection scanning with risk flags
-  - [ ] Settlement pipeline: scan -> verifiers -> arbiter -> pay or void
-  - [ ] Capture strategies (partial vs batch at end) and void fallback
-  - [ ] Signed state token for funding redirects
-  - [ ] Cursor-based pagination and filtering
-  - [ ] Idempotency-Key support with stored fingerprints
-  - [ ] Gemini arbiter client (veto-only, fail-closed, cached, hourly cap)
-  - [ ] **Exit Gate**: Full milestone lifecycle per environment with simulated provider, concurrency double-spend prevention test, fake-clock expiry test, and leak sentinel test pass.
+- [x] **P5: Contract Engine V1**
+  - [x] Contract & milestone schemas with verifiers (`python_code`, `json_data`, `text_rules`)
+  - [x] Hidden test commitment hashes recorded at creation and never exposed in public responses
+  - [x] Prompt injection scanning with risk flags
+  - [x] Settlement pipeline: scan -> verifiers -> arbiter -> pay or void
+  - [x] Capture strategies (partial vs batch at end) and void fallback
+  - [x] Signed state token for funding redirects
+  - [x] Cursor-based pagination and filtering
+  - [x] Idempotency-Key support with stored fingerprints and replayed headers
+  - [x] Gemini arbiter client (veto-only, fail-closed, cached, hourly cap)
+  - [x] Contract deadline expiry via fake-clock service helper
+  - [x] **Exit Gate**: Simulated provider drives full milestone lifecycle, failing verifier never reaches arbiter, concurrency test proves no double-spend, fake clock proves deadline expiry, planted hidden test sentinel never leaks. (Passed: 7/7 tests, 33/33 total)
 
 - [ ] **P6: Ledger, Receipts, and Code Runner**
   - [ ] Per-contract hash chain with PostgreSQL transaction advisory locks
@@ -126,6 +127,9 @@ This document tracks execution across all phases, recording exit gate validation
 2. **Settings**: Migrating from primitive environment variables to a robust `pydantic-settings` model in `app/config.py` with strict startup validation.
 3. **Database Layer**: Transitioning entirely to PostgreSQL 16 with Row-Level Security, dropping SQLite compatibility in production and development to ensure zero discrepancy in tenant isolation.
 4. **AnyIO Backend**: Excluding `trio` in pytest configuration to prevent test errors on systems where `trio` is not installed, ensuring `asyncio` is the standard backend.
+5. **Contract Engine Invariants**: Enforced strict architectural assertion `assert verif_res.passed is True` before invoking the LLM Arbiter; arbiter veto failures fail-closed without consuming submission attempts.
+6. **Concurrency Protection**: Contract and milestone database rows are locked with `FOR UPDATE` during settlement; duplicate concurrent submissions return existing outcomes without repeating payment capture.
+7. **Idempotency & Replay**: Idempotency keys verify SHA-256 request payload fingerprints and replay stored responses with the standard `Idempotent-Replayed: true` header.
 
 ### Uncertainties & Resolutions
 - **PayPal Authorization Expiry Fields**: PayPal Orders v2 returns `expiration_time` inside the authorization object (ISO 8601). We will parse and store this as `authorization_expires_at`.

@@ -168,6 +168,23 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
+    # Backwards-compatible aliases
+    @property
+    def mode(self) -> str:
+        return "demo" if self.environment == "simulated" else self.environment
+
+    @mode.setter
+    def mode(self, val: str) -> None:
+        self.environment = "simulated" if val == "demo" else val
+
+    @property
+    def buyer_id(self) -> str:
+        return self.org_id
+
+    @buyer_id.setter
+    def buyer_id(self, val: str) -> None:
+        self.org_id = val
+
     milestones: Mapped[List["Milestone"]] = relationship("Milestone", back_populates="contract", cascade="all, delete-orphan", order_by="Milestone.sequence")
     events: Mapped[List["Event"]] = relationship("Event", back_populates="contract", order_by="Event.seq")
 
@@ -203,6 +220,39 @@ class Milestone(Base):
 
     contract: Mapped["Contract"] = relationship("Contract", back_populates="milestones")
 
+    # Backwards-compatible aliases
+    @property
+    def idx(self) -> int:
+        return self.sequence
+
+    @idx.setter
+    def idx(self, val: int) -> None:
+        self.sequence = val
+
+    @property
+    def attempts(self) -> int:
+        return self.attempts_count
+
+    @attempts.setter
+    def attempts(self, val: int) -> None:
+        self.attempts_count = val
+
+    @property
+    def payout_batch_id(self) -> Optional[str]:
+        return self.payout_id
+
+    @payout_batch_id.setter
+    def payout_batch_id(self, val: Optional[str]) -> None:
+        self.payout_id = val
+
+    @property
+    def hidden_commitment(self) -> Optional[str]:
+        return self.hidden_commitment_hash
+
+    @hidden_commitment.setter
+    def hidden_commitment(self, val: Optional[str]) -> None:
+        self.hidden_commitment_hash = val
+
 
 class Event(Base):
     __tablename__ = "events"
@@ -221,6 +271,33 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     contract: Mapped["Contract"] = relationship("Contract", back_populates="events")
+
+    # Backwards-compatible aliases
+    @property
+    def type(self) -> str:
+        return self.event_type
+
+    @type.setter
+    def type(self, val: str) -> None:
+        self.event_type = val
+
+    @property
+    def hash(self) -> str:
+        return self.event_hash
+
+    @hash.setter
+    def hash(self, val: str) -> None:
+        self.event_hash = val
+
+    @property
+    def simulated(self) -> bool:
+        return bool(self.payload.get("simulated", False)) if isinstance(self.payload, dict) else False
+
+    @property
+    def simulated(self) -> bool:
+        if isinstance(self.payload, dict):
+            return self.payload.get("simulated", False)
+        return False
 
 
 class Policy(Base):

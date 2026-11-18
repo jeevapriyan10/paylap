@@ -3,12 +3,13 @@ import json
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 import httpx
 from app.config import settings
 from app.services.injection_scan import scan_for_injections
 
 _ARBITER_CACHE: dict[str, "ArbiterResult"] = {}
+_ORG_HOURLY_CALLS: Dict[str, List[float]] = {}
 MAX_SUBMISSION_CHARS = 10000
 
 
@@ -30,6 +31,30 @@ class ArbiterResult:
             "simulated": self.simulated,
             "cached": self.cached,
         }
+
+
+def _check_and_record_hourly_cap(org_id: Optional[str]) -> bool:
+    """
+    Checks if org has exceeded PAYLAP_LLM_HOURLY_CAP_PER_ORG in the last 3600 seconds.
+    Returns True if allowed, False if exceeded.
+    """
+    if not org_id:
+        return True
+
+    now = time.time()
+    one_hour_ago = now - 3600.0
+
+    calls = _ORG_HOURLY_CALLS.get(org_id, [])
+    # Prune calls older than 1 hour
+    calls = [t for t in calls if t > one_hour_ago]
+    _ORG_HOURLY_CALLS[org_id] = calls
+
+    if len(calls) >= settings.PAYLAP_LLM_HOURLY_CAP_PER_ORG:
+        return False
+
+    calls.append(now)
+    _ORG_HOURLY_CALLS[org_id] = calls
+    return True
 
 
 def _call_gemini_arbiter(
@@ -186,13 +211,17 @@ def review_submission(
     spec: str,
     submission: str,
     mode: Optional[str] = None,
+    org_id: Optional[str] = None,
     client: Optional[httpx.Client] = None
 ) -> ArbiterResult:
     """
     Evaluate submission through Arbiter.
     Can only VETO or return OK. Enforces fail-closed when unavailable.
+    Cached by sha256(f"{spec}:{submission}:{model}").
+    Respects PAYLAP_LLM_HOURLY_CAP_PER_ORG.
     """
     resolved_mode = mode or settings.resolved_arbiter_mode
+    model_name = settings.GEMINI_MODEL
     risk_flags = scan_for_injections(submission)
 
     if resolved_mode == "off":
@@ -204,9 +233,9 @@ def review_submission(
             simulated=False
         )
 
-    # In-memory cache check
+    # In-memory cache check: sha256(f"{spec}:{submission}:{model}")
     cache_key = hashlib.sha256(
-        f"{spec}|{submission}|{settings.GEMINI_MODEL}|{resolved_mode}".encode("utf-8")
+        f"{spec}:{submission}:{model_name}".encode("utf-8")
     ).hexdigest()
 
     if cache_key in _ARBITER_CACHE:
@@ -220,7 +249,16 @@ def review_submission(
             cached=True
         )
 
+    # Org-level hourly rate cap check
     if resolved_mode == "gemini":
+        if not _check_and_record_hourly_cap(org_id):
+            return ArbiterResult(
+                verdict="unavailable",
+                reasons=[f"Hourly LLM cap of {settings.PAYLAP_LLM_HOURLY_CAP_PER_ORG} calls exceeded for organization"],
+                risk_flags=risk_flags,
+                source="rate_cap",
+                simulated=False
+            )
         result = _call_gemini_arbiter(spec, submission, risk_flags, client=client)
     else:
         # Mock mode: Rule-based reviewer using injection scanner

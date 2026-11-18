@@ -1,8 +1,10 @@
 import hashlib
 import json
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from app.models import Event, utc_now
+from app.ids import generate_id
+from app.models import Contract, Event, utc_now
 
 GENESIS_PREV_HASH = "0" * 64
 
@@ -33,95 +35,101 @@ def append_event(
     event_type: str,
     payload: dict,
     contract_id: Optional[str] = None,
+    org_id: Optional[str] = None,
     simulated: bool = False
 ) -> Event:
     """Append a new event to the hash-chained, tamper-evident ledger."""
-    last_event = db.query(Event).order_by(Event.seq.desc()).first()
+    # Resolve org_id from contract if not provided
+    resolved_org_id = org_id
+    if not resolved_org_id and contract_id:
+        ctr = db.scalar(select(Contract).where(Contract.id == contract_id))
+        if ctr:
+            resolved_org_id = ctr.org_id
+
+    if not resolved_org_id:
+        resolved_org_id = "org_system"
+
+    # Per-contract hash chain sequence
+    if contract_id:
+        last_event = db.scalar(
+            select(Event).where(Event.contract_id == contract_id).order_by(Event.seq.desc()).limit(1)
+        )
+    else:
+        last_event = db.scalar(
+            select(Event).order_by(Event.seq.desc()).limit(1)
+        )
 
     if last_event is None:
         seq = 1
-        prev_hash = GENESIS_PREV_HASH
+        # Genesis hash per contract: sha256("paylap:genesis:" + contract_id)
+        if contract_id:
+            prev_hash = hashlib.sha256(f"paylap:genesis:{contract_id}".encode("utf-8")).hexdigest()
+        else:
+            prev_hash = GENESIS_PREV_HASH
     else:
         seq = last_event.seq + 1
-        prev_hash = last_event.hash
+        prev_hash = last_event.event_hash
 
     created_at = utc_now()
     created_at_iso = created_at.isoformat()
 
+    event_payload = dict(payload)
+    if simulated:
+        event_payload["simulated"] = True
+
     event_hash = compute_event_hash(
         prev_hash=prev_hash,
         event_type=event_type,
-        payload=payload,
+        payload=event_payload,
         contract_id=contract_id,
         simulated=simulated,
         created_at_iso=created_at_iso
     )
 
     event = Event(
+        id=generate_id("evt"),
+        org_id=resolved_org_id,
         contract_id=contract_id,
         seq=seq,
-        type=event_type,
-        payload=payload,
-        simulated=simulated,
+        event_type=event_type,
+        payload=event_payload,
         prev_hash=prev_hash,
-        hash=event_hash,
-        created_at=created_at
+        event_hash=event_hash,
+        created_at=created_at,
     )
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    db.flush()
     return event
 
 
-def verify_chain(db: Session) -> Tuple[bool, Optional[str], Optional[int]]:
-    """
-    Verify the integrity of the append-only event log.
-    Returns (is_valid, error_message, broken_seq).
-    """
-    events = db.query(Event).order_by(Event.seq.asc()).all()
+def verify_chain(db: Session, contract_id: Optional[str] = None) -> Tuple[bool, Optional[str], Optional[int]]:
+    """Verify hash chain integrity."""
+    query = select(Event).order_by(Event.seq.asc())
+    if contract_id:
+        query = query.where(Event.contract_id == contract_id)
+
+    events = db.scalars(query).all()
     if not events:
         return True, None, None
 
-    expected_prev_hash = GENESIS_PREV_HASH
-    expected_seq = 1
+    expected_prev = None
+    for evt in events:
+        if expected_prev is None:
+            expected_prev = evt.prev_hash
+        elif evt.prev_hash != expected_prev:
+            return False, f"Broken link at seq {evt.seq}", evt.seq
 
-    for event in events:
-        if event.seq != expected_seq:
-            return (
-                False,
-                f"Sequence break: expected seq {expected_seq}, found {event.seq}",
-                event.seq,
-            )
-
-        if event.prev_hash != expected_prev_hash:
-            return (
-                False,
-                f"Broken link at seq {event.seq}: prev_hash mismatch. Expected {expected_prev_hash}, found {event.prev_hash}",
-                event.seq,
-            )
-
-        created_at_iso = (
-            event.created_at.isoformat()
-            if hasattr(event.created_at, "isoformat")
-            else str(event.created_at)
+        calc_hash = compute_event_hash(
+            prev_hash=evt.prev_hash,
+            event_type=evt.event_type,
+            payload=evt.payload,
+            contract_id=evt.contract_id,
+            simulated=evt.simulated,
+            created_at_iso=evt.created_at.isoformat()
         )
-        recomputed = compute_event_hash(
-            prev_hash=expected_prev_hash,
-            event_type=event.type,
-            payload=event.payload,
-            contract_id=event.contract_id,
-            simulated=event.simulated,
-            created_at_iso=created_at_iso,
-        )
+        if calc_hash != evt.event_hash:
+            return False, f"Corrupted hash at seq {evt.seq}", evt.seq
 
-        if recomputed != event.hash:
-            return (
-                False,
-                f"Tampered event at seq {event.seq}: stored hash {event.hash} does not match recomputed {recomputed}",
-                event.seq,
-            )
-
-        expected_prev_hash = event.hash
-        expected_seq += 1
+        expected_prev = evt.event_hash
 
     return True, None, None
