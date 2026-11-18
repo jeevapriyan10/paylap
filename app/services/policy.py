@@ -1,95 +1,123 @@
-from datetime import timedelta
-from typing import List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from app.config import settings
-from app.models import Contract, utc_now
-from app.state import ContractStatus
+from app.models import Contract, Event, Organization, Policy
+
+
+class PolicyViolation(Exception):
+    def __init__(self, message: str, violations: Optional[List[str]] = None):
+        super().__init__(message)
+        self.message = message
+        self.violations = violations or [message]
+
+
+def get_or_create_policy(db: Session, org_id: str, environment: str) -> Policy:
+    """Retrieve per-org environment policy, or create default policy if not set."""
+    policy = db.scalar(
+        select(Policy).where(Policy.org_id == org_id, Policy.environment == environment)
+    )
+    if not policy:
+        from app.ids import generate_id
+        now = datetime.now(timezone.utc)
+        policy = Policy(
+            id=generate_id("pol"),
+            org_id=org_id,
+            environment=environment,
+            max_task_cents=2500,  # $25.00 default task limit
+            daily_cap_cents=10000,  # $100.00 daily spend limit
+            max_milestones=5,
+            worker_allowlist=None,  # Open by default
+            require_hidden_tests=True,
+            max_contract_days=28,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(policy)
+        db.commit()
+    return policy
+
+
+def evaluate_spend_policy(
+    db: Session,
+    org_id: str,
+    environment: str,
+    total_cents: int,
+    milestones: List[Dict[str, Any]],
+    worker_email: str,
+    deadline_at: Optional[datetime] = None,
+) -> Tuple[bool, List[str]]:
+    """
+    Evaluates org spend policy strictly BEFORE any provider call.
+    Returns (is_compliant, list_of_violations).
+    """
+    policy = get_or_create_policy(db, org_id, environment)
+    violations: List[str] = []
+
+    # 1. Max Task Amount Check
+    if total_cents > policy.max_task_cents:
+        violations.append(
+            f"Contract total amount ({total_cents} cents) exceeds maximum allowed task limit ({policy.max_task_cents} cents)"
+        )
+
+    # 2. Daily Spend Cap Check (sum of created/funded contracts today + proposed amount)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    spent_today = db.scalar(
+        select(func.coalesce(func.sum(Contract.total_cents), 0)).where(
+            Contract.org_id == org_id,
+            Contract.environment == environment,
+            Contract.created_at >= today_start,
+            Contract.status.notin_(["VOIDED", "CANCELLED", "BLOCKED"]),
+        )
+    ) or 0
+
+    if spent_today + total_cents > policy.daily_cap_cents:
+        violations.append(
+            f"Contract amount ({total_cents} cents) exceeds remaining daily spend cap "
+            f"({policy.daily_cap_cents - spent_today} cents remaining of {policy.daily_cap_cents} cents cap)"
+        )
+
+    # 3. Max Milestones Check (max 5)
+    if len(milestones) > policy.max_milestones:
+        violations.append(
+            f"Milestones count ({len(milestones)}) exceeds maximum allowed ({policy.max_milestones})"
+        )
+
+    # 4. Worker Allowlist Check
+    if policy.worker_allowlist:
+        allowlist_normalized = {w.strip().lower() for w in policy.worker_allowlist if w.strip()}
+        if worker_email.strip().lower() not in allowlist_normalized:
+            violations.append(f"Worker '{worker_email}' is not on the organization's approved worker allowlist")
+
+    # 5. Hidden Tests Requirement Check
+    if policy.require_hidden_tests:
+        for idx, m in enumerate(milestones, start=1):
+            ht = m.get("hidden_tests")
+            if not ht or not str(ht).strip():
+                violations.append(f"Milestone {idx} is missing required hidden tests")
+
+    # 6. Max Contract Days Check
+    if deadline_at:
+        now = datetime.now(timezone.utc)
+        deadline_tz = deadline_at if deadline_at.tzinfo else deadline_at.replace(tzinfo=timezone.utc)
+        duration_days = (deadline_tz - now).total_seconds() / 86400.0
+        if duration_days > policy.max_contract_days:
+            violations.append(
+                f"Contract deadline exceeds maximum allowed duration ({policy.max_contract_days} days)"
+            )
+
+    return len(violations) == 0, violations
 
 
 def mask_email(email: str) -> str:
-    """Mask email address for privacy (e.g. alice@example.com -> a***@example.com)."""
+    """Mask email for receipts and public pages: j***@domain.com."""
     if not email or "@" not in email:
         return "***"
-    parts = email.split("@", 1)
-    username = parts[0]
-    domain = parts[1]
-    if len(username) > 1:
-        masked_user = username[0] + "***"
+    user_part, domain_part = email.split("@", 1)
+    if len(user_part) <= 1:
+        masked_user = "*"
+    elif len(user_part) == 2:
+        masked_user = user_part[0] + "*"
     else:
-        masked_user = "***"
-    return f"{masked_user}@{domain}"
-
-
-def validate_spend_policy(
-    db: Session,
-    buyer_id: str,
-    worker_email: str,
-    total_cents: int,
-    milestone_count: int
-) -> Tuple[bool, List[str]]:
-    """
-    Evaluates spend policy rules before any escrow order is initiated:
-    1. Per-task budget cap (PAYLAP_POLICY_MAX_TASK_USD).
-    2. Per-buyer rolling 24-hour committed budget cap (PAYLAP_POLICY_DAILY_USD).
-    3. Worker email allowlist check (if allowlist is configured).
-    4. Milestone count limits (1 to 3).
-    """
-    violations = []
-
-    # 1. Milestone count check
-    if not (1 <= milestone_count <= 3):
-        violations.append(f"Milestone count {milestone_count} violates policy (must be 1 to 3).")
-
-    # 2. Per-task budget cap
-    max_task_cents = settings.PAYLAP_POLICY_MAX_TASK_USD * 100
-    if total_cents > max_task_cents:
-        task_usd = total_cents / 100.0
-        violations.append(
-            f"Task budget ${task_usd:.2f} exceeds maximum task policy limit of ${settings.PAYLAP_POLICY_MAX_TASK_USD:.2f}."
-        )
-
-    # 3. Rolling 24-hour committed budget cap per buyer
-    since_24h = utc_now() - timedelta(hours=24)
-    past_contracts = (
-        db.query(Contract)
-        .filter(
-            Contract.buyer_id == buyer_id,
-            Contract.created_at >= since_24h,
-            Contract.status.notin_([
-                ContractStatus.CANCELLED.value,
-                ContractStatus.BLOCKED.value,
-                ContractStatus.ERROR.value,
-            ])
-        )
-        .all()
-    )
-    past_committed_cents = sum(c.total_cents for c in past_contracts)
-    projected_daily_cents = past_committed_cents + total_cents
-    max_daily_cents = settings.PAYLAP_POLICY_DAILY_USD * 100
-
-    if projected_daily_cents > max_daily_cents:
-        projected_usd = projected_daily_cents / 100.0
-        violations.append(
-            f"Buyer 24-hour committed budget ${projected_usd:.2f} exceeds daily policy limit of ${settings.PAYLAP_POLICY_DAILY_USD:.2f}."
-        )
-
-    # 4. Worker email allowlist check (if configured)
-    allowlist = settings.policy_allowlist_set
-    if allowlist:
-        clean_email = worker_email.strip().lower()
-        if clean_email not in allowlist:
-            violations.append(
-                f"Worker recipient email '{worker_email}' is not in the authorized recipient allowlist."
-            )
-
-    return (len(violations) == 0, violations)
-
-
-def get_policy_summary() -> dict:
-    """Return configured policy limits with masked emails."""
-    allowlist = [mask_email(e) for e in sorted(settings.policy_allowlist_set)]
-    return {
-        "max_task_usd": settings.PAYLAP_POLICY_MAX_TASK_USD,
-        "daily_usd": settings.PAYLAP_POLICY_DAILY_USD,
-        "allowlist": allowlist,
-    }
+        masked_user = user_part[0] + "*" * (len(user_part) - 2) + user_part[-1]
+    return f"{masked_user}@{domain_part}"

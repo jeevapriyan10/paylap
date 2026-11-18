@@ -48,14 +48,14 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] Migration of all endpoints from `/api/*` to `/v1/*`
   - [x] **Exit Gate**: Error format, redaction filter (with planted sentinels), rate limiting, and health checks pass. (Passed: 5/5 tests)
 
-- [ ] **P4: PayPal Credentials, Environments, and Policy**
-  - [ ] Org BYO credentials encrypted with AES-256-GCM (12-byte random nonce, AAD `org_id:environment:field`, envelope `key_id.nonce.ciphertext`)
-  - [ ] Credentials CRUD endpoints and OAuth token verification
-  - [ ] Fixed PayPal base URLs per environment
-  - [ ] CLI command `rotate-master-key`
-  - [ ] Provider factory `get_provider(org, environment)`
-  - [ ] Per-org spend policies (max task amount, daily spend cap, max milestones, worker allowlist, require hidden tests)
-  - [ ] **Exit Gate**: Encryption round-trip, wrong-AAD failure, key rotation, live-disabled-by-default, and policy enforcement tests pass.
+- [x] **P4: PayPal Credentials, Environments, and Policy**
+  - [x] Org BYO credentials encrypted with AES-256-GCM (12-byte random nonce, AAD `org_id:environment:field`, envelope `key_id.nonce.ciphertext`)
+  - [x] Credentials CRUD endpoints and OAuth token verification
+  - [x] Fixed PayPal base URLs per environment
+  - [x] CLI command `rotate-master-key` and batch rotation service
+  - [x] Provider factory `get_provider(org, environment)`
+  - [x] Per-org spend policies (max task amount, daily spend cap, max milestones, worker allowlist, require hidden tests)
+  - [x] **Exit Gate**: Encryption round-trip, wrong-AAD failure, key rotation, live-disabled-by-default, and policy enforcement tests pass. (Passed: 5/5 tests)
 
 - [ ] **P5: Contract Engine V1**
   - [ ] Contract & milestone schemas with verifiers (`python_code`, `json_data`, `text_rules`)
