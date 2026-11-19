@@ -64,6 +64,7 @@ def evaluate_spend_policy(
 
     # 2. Daily Spend Cap Check (sum of created/funded contracts today + proposed amount)
     # Red Team Arena non-overspender scenarios test defense invariants rather than org's daily budget exhaustion
+    # pyrefly: ignore[unnecessary-type-conversion]
     is_arena = bool(buyer_id and str(buyer_id).startswith("buyer_arena_"))
     if not is_arena:
         today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
