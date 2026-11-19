@@ -143,6 +143,7 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
             "http_status": res_create.status_code,
             "expected_outcome": scen["expected_outcome"],
             "actual_outcome": "ERROR",
+            "elapsed_ms": int((time.time() - t0) * 1000),
         }
 
     contract_data = res_create.json()

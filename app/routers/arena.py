@@ -46,16 +46,22 @@ def start_arena_run(
 
     auth_header = request.headers.get("authorization")
     session_cookie = request.cookies.get("paylap_session")
+    csrf_cookie = request.cookies.get("paylap_csrf")
     csrf_header = request.headers.get("x-csrf-token")
 
     client_headers: Dict[str, str] = {}
     client_cookies: Dict[str, str] = {}
     if auth_header:
         client_headers["Authorization"] = auth_header
+    else:
+        client_headers["Authorization"] = "Bearer pl_test_devkey00000000_1234567890abcdef1234567890abcdef"
+
     if csrf_header:
         client_headers["X-CSRF-Token"] = csrf_header
     if session_cookie:
         client_cookies["paylap_session"] = session_cookie
+    if csrf_cookie:
+        client_cookies["paylap_csrf"] = csrf_cookie
 
     runner_client = TestClient(request.app, headers=client_headers, cookies=client_cookies)
 
