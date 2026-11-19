@@ -159,12 +159,14 @@ class PayLap(BaseClient):
 
         resp = self._client.post("/v1/contracts", json=payload, headers=headers)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def get_contract(self, contract_id: str) -> Dict[str, Any]:
         """Retrieve a contract by ID."""
         resp = self._client.get(f"/v1/contracts/{contract_id}")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def list_contracts(
@@ -188,18 +190,21 @@ class PayLap(BaseClient):
 
         resp = self._client.get("/v1/contracts", params=params)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def fund_contract(self, contract_id: str) -> Dict[str, Any]:
         """Trigger funding authorization capture for a contract."""
         resp = self._client.post(f"/v1/contracts/{contract_id}/fund")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def cancel_contract(self, contract_id: str) -> Dict[str, Any]:
         """Cancel an unfunded or funded contract, voiding holds."""
         resp = self._client.post(f"/v1/contracts/{contract_id}/cancel")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def submit_milestone(
@@ -218,30 +223,35 @@ class PayLap(BaseClient):
         }
         resp = self._client.post(f"/v1/contracts/{contract_id}/milestones/{sequence}/submit", json=payload)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def get_receipt(self, contract_id: str) -> Dict[str, Any]:
         """Retrieve the cryptographic receipt for a completed contract."""
         resp = self._client.get(f"/v1/contracts/{contract_id}/receipt")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def verify_public_receipt(self, share_token: str) -> Dict[str, Any]:
         """Verify and inspect a public receipt via share token."""
         resp = self._client.get(f"/v1/receipts/{share_token}")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def get_worker_stats(self, worker_id: str) -> Dict[str, Any]:
         """Fetch worker reputation and completion metrics."""
         resp = self._client.get(f"/v1/workers/{worker_id}/stats")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def get_org_stats(self) -> Dict[str, Any]:
         """Fetch tenant statistics and settlement volumes."""
         resp = self._client.get("/v1/org/stats")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     def run_arena(self, scenario: str = "all", sync: bool = True) -> Dict[str, Any]:
@@ -249,6 +259,7 @@ class PayLap(BaseClient):
         payload = {"scenario": scenario, "sync": sync}
         resp = self._client.post("/v1/arena/run", json=payload, timeout=60.0)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     @staticmethod
@@ -308,11 +319,13 @@ class AsyncPayLap(BaseClient):
 
         resp = await self._client.post("/v1/contracts", json=payload, headers=headers)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def get_contract(self, contract_id: str) -> Dict[str, Any]:
         resp = await self._client.get(f"/v1/contracts/{contract_id}")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def list_contracts(
@@ -335,16 +348,19 @@ class AsyncPayLap(BaseClient):
 
         resp = await self._client.get("/v1/contracts", params=params)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def fund_contract(self, contract_id: str) -> Dict[str, Any]:
         resp = await self._client.post(f"/v1/contracts/{contract_id}/fund")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def cancel_contract(self, contract_id: str) -> Dict[str, Any]:
         resp = await self._client.post(f"/v1/contracts/{contract_id}/cancel")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def submit_milestone(
@@ -362,32 +378,38 @@ class AsyncPayLap(BaseClient):
         }
         resp = await self._client.post(f"/v1/contracts/{contract_id}/milestones/{sequence}/submit", json=payload)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def get_receipt(self, contract_id: str) -> Dict[str, Any]:
         resp = await self._client.get(f"/v1/contracts/{contract_id}/receipt")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def verify_public_receipt(self, share_token: str) -> Dict[str, Any]:
         resp = await self._client.get(f"/v1/receipts/{share_token}")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def get_worker_stats(self, worker_id: str) -> Dict[str, Any]:
         resp = await self._client.get(f"/v1/workers/{worker_id}/stats")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def get_org_stats(self) -> Dict[str, Any]:
         resp = await self._client.get("/v1/org/stats")
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     async def run_arena(self, scenario: str = "all", sync: bool = True) -> Dict[str, Any]:
         payload = {"scenario": scenario, "sync": sync}
         resp = await self._client.post("/v1/arena/run", json=payload, timeout=60.0)
         _raise_for_status(resp)
+        # pyrefly: ignore[no-any-return-explicit]
         return resp.json()
 
     @staticmethod
