@@ -83,7 +83,10 @@ RUNS: Dict[str, Dict[str, Any]] = {}
 def get_client() -> TestClient:
     from app.main import app
 
-    return TestClient(app)
+    return TestClient(
+        app,
+        headers={"Authorization": "Bearer pl_test_devkey00000000_1234567890abcdef1234567890abcdef"},
+    )
 
 
 def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> Dict[str, Any]:
@@ -138,6 +141,7 @@ def execute_scenario(scenario_key: str, client: Optional[TestClient] = None) -> 
             "passed": False,
             "error": f"Failed to create contract: {res_create.text}",
             "http_status": res_create.status_code,
+            "expected_outcome": scen["expected_outcome"],
             "actual_outcome": "ERROR",
         }
 

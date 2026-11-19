@@ -1,7 +1,7 @@
 site_name: PayLap Documentation
 site_description: Open-source settlement engine for pay on verified delivery
 site_author: PayLap Team
-repo_url: https://github.com/paylap/paylap
+repo_url: https://github.com/jeevapriyan10/paylap
 theme:
   name: material
   palette:

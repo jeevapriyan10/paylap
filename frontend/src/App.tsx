@@ -44,9 +44,32 @@ export const App: React.FC = () => {
       if (res && res.user) {
         setCurrentUser(res.user);
         localStorage.setItem("paylap_user", JSON.stringify(res.user));
+        return;
       }
     } catch {
-      // Unauthenticated, leave null
+      // Unauthenticated, try dev auto-login
+    }
+
+    // Auto-login seeded dev user if no session or key exists
+    if (!storedUser && !storedKey) {
+      try {
+        const loginRes = await PayLapClient.post<any>("/v1/auth/login", {
+          email: "dev@paylap.local",
+          password: "Development1234!",
+        });
+        if (loginRes && loginRes.user) {
+          setCurrentUser(loginRes.user);
+          if (loginRes.csrf_token) {
+            localStorage.setItem("paylap_csrf_token", loginRes.csrf_token);
+          }
+          localStorage.setItem("paylap_user", JSON.stringify(loginRes.user));
+          window.dispatchEvent(new Event("paylap_auth_change"));
+        }
+      } catch {
+        localStorage.setItem("paylap_api_key", "pl_test_devkey00000000_1234567890abcdef1234567890abcdef");
+        setCurrentUser({ email: "dev@paylap.local", isApiKey: true });
+        window.dispatchEvent(new Event("paylap_auth_change"));
+      }
     }
   };
 
@@ -167,28 +190,43 @@ export const App: React.FC = () => {
             Simulated
           </span>
 
-          {currentUser ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-              <span className="mono" style={{ fontSize: "0.78rem", color: "var(--accent-cyan)", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {currentUser.email}
-              </span>
-              <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
-                Sign Out
+          <div className="desktop-only" style={{ alignItems: "center", gap: "0.6rem" }}>
+            {currentUser ? (
+              <>
+                <span className="mono" style={{ fontSize: "0.78rem", color: "var(--accent-cyan)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {currentUser.email}
+                </span>
+                <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={() => setShowAuthModal(true)}>
+                Sign In
               </button>
-            </div>
-          ) : (
-            <button className="btn btn-primary btn-sm" onClick={() => setShowAuthModal(true)}>
-              Sign In
-            </button>
-          )}
+            )}
+          </div>
 
-          {/* Mobile hamburger menu toggle */}
+          {/* Mobile hamburger menu toggle with clean SVG icon */}
           <button
             className="mobile-menu-btn"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle navigation menu"
           >
-            {mobileMenuOpen ? "✕" : "☰"}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              {mobileMenuOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              )}
+            </svg>
           </button>
         </div>
       </nav>
@@ -196,24 +234,53 @@ export const App: React.FC = () => {
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="mobile-nav-drawer">
-          <button
-            className={`nav-link ${currentPath === "/" || currentPath.startsWith("/contracts") ? "active" : ""}`}
-            onClick={() => navigate("/")}
-          >
-            Contracts
-          </button>
-          <button
-            className={`nav-link ${currentPath === "/playground" ? "active" : ""}`}
-            onClick={() => navigate("/playground")}
-          >
-            Red Team Arena
-          </button>
-          <button
-            className={`nav-link ${currentPath === "/settings" ? "active" : ""}`}
-            onClick={() => navigate("/settings")}
-          >
-            Settings
-          </button>
+          <div className="mobile-drawer-links">
+            <button
+              className={`nav-link ${currentPath === "/" || currentPath.startsWith("/contracts") ? "active" : ""}`}
+              onClick={() => navigate("/")}
+            >
+              Contracts
+            </button>
+            <button
+              className={`nav-link ${currentPath === "/playground" ? "active" : ""}`}
+              onClick={() => navigate("/playground")}
+            >
+              Red Team Arena
+            </button>
+            <button
+              className={`nav-link ${currentPath === "/settings" ? "active" : ""}`}
+              onClick={() => navigate("/settings")}
+            >
+              Settings
+            </button>
+          </div>
+
+          <div className="mobile-drawer-user">
+            {currentUser ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <span className="badge-dot badge-dot-success" />
+                  <span className="mono" style={{ fontSize: "0.8rem", color: "var(--accent-cyan)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {currentUser.email}
+                  </span>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={() => {
+                  setShowAuthModal(true);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                Sign In
+              </button>
+            )}
+          </div>
         </div>
       )}
 

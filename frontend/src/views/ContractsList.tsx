@@ -41,6 +41,9 @@ export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, 
 
   useEffect(() => {
     loadContracts();
+    const handleAuthChange = () => loadContracts();
+    window.addEventListener("paylap_auth_change", handleAuthChange);
+    return () => window.removeEventListener("paylap_auth_change", handleAuthChange);
   }, [statusFilter, envFilter]);
 
   const loadContracts = async () => {
@@ -159,10 +162,35 @@ export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, 
               ? "Sign in to your organization or provide a developer API key to view and manage settlement contracts."
               : error}
           </p>
-          {error.includes("Authentication") && onOpenAuth && (
-            <button className="btn btn-primary" onClick={onOpenAuth}>
-              Sign In to View Contracts
-            </button>
+          {error.includes("Authentication") && (
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
+              <button
+                className="btn btn-primary"
+                onClick={async () => {
+                  try {
+                    const res = await PayLapClient.post<any>("/v1/auth/login", {
+                      email: "dev@paylap.local",
+                      password: "Development1234!",
+                    });
+                    if (res?.csrf_token) localStorage.setItem("paylap_csrf_token", res.csrf_token);
+                    if (res?.user) localStorage.setItem("paylap_user", JSON.stringify(res.user));
+                    window.dispatchEvent(new Event("paylap_auth_change"));
+                    loadContracts();
+                  } catch {
+                    localStorage.setItem("paylap_api_key", "pl_test_devkey00000000_1234567890abcdef1234567890abcdef");
+                    window.dispatchEvent(new Event("paylap_auth_change"));
+                    loadContracts();
+                  }
+                }}
+              >
+                1-Click Sign In as Dev
+              </button>
+              {onOpenAuth && (
+                <button className="btn btn-secondary" onClick={onOpenAuth}>
+                  Custom Sign In
+                </button>
+              )}
+            </div>
           )}
         </div>
       ) : filteredContracts.length === 0 ? (

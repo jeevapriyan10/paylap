@@ -554,10 +554,18 @@ table.data-table tr:hover td {
   color: var(--text-muted);
 }
 
+.desktop-only {
+  display: flex;
+}
+
 /* ==============================================================================
    RESPONSIVE MEDIA QUERIES (Mobile to Tablet)
    ============================================================================== */
 @media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
   .navbar {
     padding: 0.65rem 1rem;
   }
@@ -568,26 +576,41 @@ table.data-table tr:hover td {
 
   .mobile-menu-btn {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .mobile-nav-drawer {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 1rem;
+    padding: 0.75rem 1rem 1rem 1rem;
     background-color: var(--bg-surface);
     border-bottom: 1px solid var(--border-subtle);
   }
 
-  .mobile-nav-drawer .nav-link {
+  .mobile-drawer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .mobile-drawer-links .nav-link {
     text-align: left;
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.75rem;
     font-size: 14px;
+    border-radius: var(--radius-sm);
+  }
+
+  .mobile-drawer-user {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .page-header {
     flex-direction: column;
     align-items: stretch;
+    gap: 1rem;
   }
 
   .page-header .btn {

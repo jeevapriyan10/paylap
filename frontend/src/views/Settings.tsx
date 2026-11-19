@@ -79,7 +79,7 @@ export const Settings: React.FC = () => {
       setPpStatus("Testing OAuth token handshake with PayPal...");
       const res = await PayLapClient.post<any>(`/v1/org/paypal/${ppEnv}/verify`);
       if (res.verified) {
-        setPpStatus(`✓ Successfully verified OAuth with PayPal ${ppEnv} at ${res.verified_at}`);
+        setPpStatus(`Successfully verified OAuth with PayPal ${ppEnv} at ${res.verified_at}`);
       } else {
         setPpStatus(`Verification failed: ${res.error || "Invalid response"}`);
       }
@@ -489,7 +489,7 @@ export const Settings: React.FC = () => {
                       }}
                     >
                       <div style={{ fontWeight: 700, color: "var(--accent-amber)", marginBottom: "0.25rem" }}>
-                        ⚠️ COPY YOUR KEY NOW
+                        IMPORTANT: COPY YOUR KEY NOW
                       </div>
                       <div style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
                         This is the only time the full secret key is displayed. PayLap only stores a SHA-256 hash.

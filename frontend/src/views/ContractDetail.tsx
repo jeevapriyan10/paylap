@@ -290,7 +290,7 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
                 }}
               >
                 <div style={{ fontWeight: 600, color: submitOutcome.passed ? "var(--accent-emerald)" : "var(--accent-rose)" }}>
-                  {submitOutcome.passed ? "✓ Verification Passed & Settlement Completed" : "✗ Verification Rejected"}
+                  {submitOutcome.passed ? "Verification Passed & Settlement Completed" : "Verification Rejected"}
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-primary)", marginTop: "0.25rem" }}>
                   {submitOutcome.status && <div>Status: {submitOutcome.status}</div>}
@@ -328,7 +328,7 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
               <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>Ed25519 Cryptographic Receipt</h3>
               <button className="btn btn-secondary btn-sm" onClick={() => setReceiptData(null)}>
-                ✕
+                Close
               </button>
             </div>
 
@@ -339,7 +339,7 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
                 {verificationResult?.valid && (
                   <div style={{ marginBottom: "1rem" }}>
                     <div className="verified-stamp">
-                      <span>✓</span> Cryptographically Verified Offline (Ed25519)
+                      <span className="badge-dot badge-dot-success" style={{ marginRight: "0.4rem" }} /> Cryptographically Verified Offline (Ed25519)
                     </div>
                     {verificationResult.publicKeyHex && (
                       <div className="mono" style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.35rem" }}>

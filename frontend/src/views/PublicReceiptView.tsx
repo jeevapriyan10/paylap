@@ -91,10 +91,8 @@ export const PublicReceiptView: React.FC<PublicReceiptViewProps> = ({ shareToken
             marginBottom: "1.5rem",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontSize: "1.2rem", color: verification?.valid ? "var(--accent-emerald)" : "var(--accent-rose)" }}>
-              {verification?.valid ? "✓" : "✗"}
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <span className={`badge-dot ${verification?.valid ? "badge-dot-success" : "badge-dot-danger"}`} />
             <span style={{ fontWeight: 700, color: verification?.valid ? "var(--accent-emerald)" : "var(--accent-rose)" }}>
               {verification?.valid
                 ? "Cryptographically Verified Offline via Ed25519"

@@ -60,7 +60,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 style={{ fontSize: "1.2rem", fontWeight: 700, letterSpacing: "-0.01em" }}>Authentication</h2>
           <button className="btn btn-secondary btn-sm" onClick={onClose} aria-label="Close">
-            ✕
+            Close
           </button>
         </div>
 

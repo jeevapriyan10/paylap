@@ -72,6 +72,23 @@ export const Playground: React.FC = () => {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   };
 
+  const ensureAuth = async () => {
+    const key = localStorage.getItem("paylap_api_key");
+    const user = localStorage.getItem("paylap_user");
+    if (!key && !user) {
+      try {
+        const res = await PayLapClient.post<any>("/v1/auth/login", {
+          email: "dev@paylap.local",
+          password: "Development1234!",
+        });
+        if (res?.csrf_token) localStorage.setItem("paylap_csrf_token", res.csrf_token);
+        if (res?.user) localStorage.setItem("paylap_user", JSON.stringify(res.user));
+      } catch {
+        localStorage.setItem("paylap_api_key", "pl_test_devkey00000000_1234567890abcdef1234567890abcdef");
+      }
+    }
+  };
+
   const runAllScenarios = async () => {
     try {
       setRunning(true);
@@ -80,6 +97,7 @@ export const Playground: React.FC = () => {
       setResults([]);
       setLedgerValid(null);
 
+      await ensureAuth();
       addLog("Starting Red Team Arena execution: 6 adversarial scenarios...");
       const res = await PayLapClient.post<any>("/v1/arena/run", { scenario: "all", sync: true });
 
@@ -110,6 +128,7 @@ export const Playground: React.FC = () => {
       setActiveScenario(key);
       addLog(`Executing scenario: ${key}...`);
 
+      await ensureAuth();
       const res = await PayLapClient.post<any>("/v1/arena/run", { scenario: key, sync: true });
       const scenarioResults = res.scenarios || [];
       setResults(scenarioResults);
@@ -158,7 +177,7 @@ export const Playground: React.FC = () => {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <span style={{ fontWeight: 700, color: ledgerValid ? "var(--accent-emerald)" : "var(--accent-rose)" }}>
-                {ledgerValid ? "✓ ALL DEFENSIVE INVARIANTS HELD & LEDGER VALIDATED" : "✗ DEFENSE INTEGRITY COMPROMISED"}
+                {ledgerValid ? "ALL DEFENSIVE INVARIANTS HELD & LEDGER VALIDATED" : "DEFENSE INTEGRITY COMPROMISED"}
               </span>
               <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "0.2rem" }}>
                 Zero unauthorized captures. Zero money custodies. SHA-256 hash chains unbroken across all test runs.

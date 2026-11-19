@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -34,6 +35,8 @@ from app.state import (
     InvalidStateTransitionError,
     transition_contract,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/contracts", tags=["Contracts"])
 
@@ -725,6 +728,7 @@ def submit_milestone(
     except InvalidStateTransitionError as state_err:
         raise HTTPException(status_code=400, detail=str(state_err))
     except Exception as exc:
+        logger.exception("Settlement error for contract %s milestone %d: %s", contract_id, idx, exc)
         raise HTTPException(status_code=500, detail=f"Settlement error: {exc}")
 
 

@@ -345,7 +345,7 @@ def settle_milestone(
 
     # Step 3: Deterministic Gate PASSED -> Invoke Arbiter (Veto Layer)
     arbiter_mode = settings.resolved_arbiter_mode
-    if is_simulated and arbiter_mode not in ("off", "gemini"):
+    if is_simulated and arbiter_mode != "off":
         arbiter_mode = "mock"
 
     arbiter_res = review_submission(

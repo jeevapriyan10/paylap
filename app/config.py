@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # LLM Arbiter Configuration
     PAYLAP_LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
     PAYLAP_LLM_HOURLY_CAP_PER_ORG: int = 60
 
     # Backwards-compatible / Stage 2 aliases
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     PAYLAP_POLICY_MAX_TASK_USD: int = 25
     PAYLAP_POLICY_DAILY_USD: int = 100
     PAYLAP_POLICY_ALLOWLIST: str = ""
-    ARENA_WORKER_SOURCE: Literal["auto", "gemini", "canned"] = "auto"
+    ARENA_WORKER_SOURCE: Literal["auto", "gemini", "canned"] = "canned"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
