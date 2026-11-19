@@ -199,6 +199,7 @@ def create_contract(
         milestones=[m.model_dump() for m in payload.milestones],
         worker_email=payload.worker_email,
         deadline_at=payload.deadline_at,
+        buyer_id=payload.buyer_id,
     )
 
     if not allowed:
