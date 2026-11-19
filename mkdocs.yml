@@ -1,0 +1,41 @@
+site_name: PayLap Documentation
+site_description: Open-source settlement engine for pay on verified delivery
+site_author: PayLap Team
+repo_url: https://github.com/paylap/paylap
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: cyan
+    accent: sky
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Overview: index.md
+  - Quickstart: quickstart.md
+  - Core Concepts: concepts.md
+  - Architecture: architecture.md
+  - Threat Model: threat_model.md
+  - Receipts & Cryptography: receipts.md
+  - Python SDK & MCP: sdk_mcp.md
+  - Architecture Decisions:
+      - "ADR 0001: PostgreSQL RLS": adrs/0001-postgresql-rls.md
+      - "ADR 0002: Hash-Chained Ledger": adrs/0002-hash-chained-ledger.md
+  - Engineering Rules: ENGINEERING_RULES.md
+  - Development Progress: PROGRESS.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - admonition
+  - tables
