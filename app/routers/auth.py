@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -485,7 +485,10 @@ def create_api_key(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role to create API keys")
     else:
         if "api_keys:manage" not in principal.scopes and principal.env_class != "test":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API keys require 'api_keys:manage' permission to create other keys")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="API keys require 'api_keys:manage' permission to create other keys",
+            )
 
     # Validate scopes
     for s in payload.scopes:
