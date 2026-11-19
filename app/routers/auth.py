@@ -479,12 +479,13 @@ def create_api_key(
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
 ):
-    # Developer can create own keys; Admin/Owner can create keys
+    # Developer can create own keys; Admin/Owner can create keys; test keys can create test keys
     if not principal.is_api_key:
         if principal.role not in ("developer", "admin", "owner"):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role to create API keys")
     else:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API keys cannot create other API keys")
+        if "api_keys:manage" not in principal.scopes and principal.env_class != "test":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API keys require 'api_keys:manage' permission to create other keys")
 
     # Validate scopes
     for s in payload.scopes:

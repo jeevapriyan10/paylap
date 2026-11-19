@@ -19,6 +19,7 @@ from app.routers import (
     contracts,
     health,
     org_paypal,
+    organization,
     playground,
     policy,
     receipts,
@@ -81,6 +82,7 @@ app.include_router(health.router)
 
 # V1 API Routes
 app.include_router(auth.router)
+app.include_router(organization.router)
 app.include_router(org_paypal.router)
 app.include_router(policy.router)
 app.include_router(contracts.router)

@@ -18,7 +18,7 @@ class UpdatePolicyRequest(BaseModel):
     max_milestones: int = Field(..., ge=1, le=5)
     worker_allowlist: Optional[List[str]] = None
     require_hidden_tests: bool = True
-    max_contract_days: int = Field(..., ge=1, le=29)
+    max_contract_days: int = Field(28, ge=1, le=29)
 
 
 @router.get("/{environment}")

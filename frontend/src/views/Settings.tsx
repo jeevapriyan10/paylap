@@ -103,6 +103,7 @@ export const Settings: React.FC = () => {
         daily_cap_cents: capCents,
         max_milestones: maxMilestones,
         require_hidden_tests: requireHidden,
+        max_contract_days: 28,
       });
       setPolicyMsg("Policy configuration updated successfully.");
     } catch (err: any) {

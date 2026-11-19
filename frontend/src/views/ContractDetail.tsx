@@ -67,25 +67,50 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
   };
 
   const handleInspectReceipt = async (token?: string) => {
-    const targetToken = token || receiptToken || contract?.share_token;
-    if (!targetToken) {
-      alert("No receipt share token available for this contract yet.");
-      return;
-    }
+    let targetToken = token || receiptToken || contract?.share_token;
     try {
       setReceiptLoading(true);
-      setReceiptToken(targetToken);
-      const data = await PayLapClient.get<any>(`/v1/receipts/${targetToken}`);
-      setReceiptData(data.receipt || data);
+      let receipt: any = null;
+
+      if (targetToken) {
+        try {
+          const data = await PayLapClient.get<any>(`/v1/receipts/${targetToken}`);
+          receipt = data.receipt || data;
+          setReceiptToken(targetToken);
+        } catch {
+          // fallback to contract receipt endpoint
+        }
+      }
+
+      if (!receipt) {
+        const data = await PayLapClient.get<any>(`/v1/contracts/${contractId}/receipt`);
+        receipt = data.receipt || data;
+      }
+
+      setReceiptData(receipt);
 
       // Verify offline in browser
-      const result = await verifyReceiptOffline(data.receipt || data);
+      const result = await verifyReceiptOffline(receipt);
       setVerificationResult(result);
     } catch (err: any) {
-      setReceiptData({ error: err?.message || "Failed to fetch receipt" });
-      setVerificationResult({ valid: false, error: err?.message });
+      alert(`Receipt is not available: ${err?.message || err}`);
     } finally {
       setReceiptLoading(false);
+    }
+  };
+
+  const handleShareReceipt = async () => {
+    try {
+      const res = await PayLapClient.post<any>(`/v1/contracts/${contractId}/share`);
+      const shareUrl = `${window.location.origin}/receipts/${res.share_token}`;
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        alert(`Public receipt link copied to clipboard!\n${shareUrl}`);
+      } catch {
+        prompt("Copy this public receipt URL:", shareUrl);
+      }
+    } catch (err: any) {
+      alert(`Failed to generate share link: ${err?.message || err}`);
     }
   };
 
@@ -140,6 +165,9 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => handleInspectReceipt()}>
             Inspect Digital Receipt
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={handleShareReceipt}>
+            Share Link
           </button>
         </div>
       </div>

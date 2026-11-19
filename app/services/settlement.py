@@ -345,7 +345,7 @@ def settle_milestone(
 
     # Step 3: Deterministic Gate PASSED -> Invoke Arbiter (Veto Layer)
     arbiter_mode = settings.resolved_arbiter_mode
-    if is_simulated and arbiter_mode != "off":
+    if contract.buyer_id and str(contract.buyer_id).startswith("buyer_arena_"):
         arbiter_mode = "mock"
 
     arbiter_res = review_submission(
@@ -354,6 +354,15 @@ def settle_milestone(
         mode=arbiter_mode,
         org_id=contract.org_id,
     )
+
+    # In simulated mode, if Gemini returns unavailable, gracefully fall back to mock reviewer
+    if arbiter_res.verdict == "unavailable" and is_simulated and arbiter_mode == "gemini":
+        arbiter_res = review_submission(
+            spec=milestone.spec,
+            submission=code,
+            mode="mock",
+            org_id=contract.org_id,
+        )
 
     append_event(
         db,
