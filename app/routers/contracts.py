@@ -9,7 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import get_db, set_tenant_org
 from app.ids import generate_id
 from app.ledger import append_event
 from app.models import Contract, Event, Milestone, Organization, ShareToken
@@ -36,11 +36,6 @@ from app.state import (
 )
 
 router = APIRouter(prefix="/v1/contracts", tags=["Contracts"])
-
-
-def set_tenant_org(db: Session, org_id: str) -> None:
-    """Set app.current_org on the Postgres transaction for Row-Level Security."""
-    db.execute(text("SELECT set_config('app.current_org', :org_id, true)"), {"org_id": org_id})
 
 
 def sanitize_verifier_config(config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

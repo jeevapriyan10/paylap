@@ -17,14 +17,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
 
   if (!isOpen) return null;
 
-  const handleLogin = async (e?: React.FormEvent) => {
+  const handleLogin = async (e?: React.FormEvent, customEmail?: string, customPass?: string) => {
     if (e) e.preventDefault();
+    const loginEmail = (customEmail ?? email).trim();
+    const loginPass = customPass ?? password;
+
     try {
       setLoading(true);
       setError(null);
       const res = await PayLapClient.post<any>("/v1/auth/login", {
-        email: email.trim(),
-        password: password,
+        email: loginEmail,
+        password: loginPass,
       });
 
       if (res.csrf_token) {
@@ -55,8 +58,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: "460px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-          <h2 style={{ fontSize: "1.25rem", fontWeight: 700 }}>Authentication</h2>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>
+          <h2 style={{ fontSize: "1.2rem", fontWeight: 700, letterSpacing: "-0.01em" }}>Authentication</h2>
+          <button className="btn btn-secondary btn-sm" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
@@ -77,29 +80,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
         </div>
 
         {tab === "login" ? (
-          <form onSubmit={handleLogin}>
+          <form onSubmit={(e) => handleLogin(e)}>
             <div
               style={{
-                padding: "0.75rem",
+                padding: "0.85rem",
                 borderRadius: "var(--radius-sm)",
                 backgroundColor: "var(--accent-cyan-bg)",
-                border: "1px solid rgba(6, 182, 212, 0.3)",
-                marginBottom: "1rem",
-                fontSize: "0.85rem",
+                border: "1px solid rgba(56, 189, 248, 0.2)",
+                marginBottom: "1.25rem",
+                fontSize: "0.825rem",
               }}
             >
-              <div style={{ fontWeight: 600, color: "var(--accent-cyan)", marginBottom: "0.2rem" }}>
-                ⚡ Development Credentials Pre-filled
+              <div style={{ fontWeight: 600, color: "var(--accent-cyan)", marginBottom: "0.25rem" }}>
+                Development Account
               </div>
-              <div style={{ color: "var(--text-secondary)" }}>
-                Click <strong>"Sign In"</strong> below to authenticate with the seeded development account.
+              <div style={{ color: "var(--text-secondary)", marginBottom: "0.6rem" }}>
+                Pre-filled with seeded dev credentials (<code className="mono">dev@paylap.local</code>).
               </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ width: "100%", justifyContent: "center" }}
+                disabled={loading}
+                onClick={() => handleLogin(undefined, "dev@paylap.local", "Development1234!")}
+              >
+                {loading ? "Authenticating..." : "1-Click Sign In as Dev"}
+              </button>
             </div>
 
             <div className="form-group">
               <label className="form-label">EMAIL ADDRESS</label>
               <input
-                type="email"
+                type="text"
                 className="form-input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -137,12 +149,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSu
           <form onSubmit={handleSaveApiKey}>
             <div
               style={{
-                padding: "0.75rem",
+                padding: "0.85rem",
                 borderRadius: "var(--radius-sm)",
                 backgroundColor: "var(--bg-elevated)",
                 border: "1px solid var(--border-subtle)",
-                marginBottom: "1rem",
-                fontSize: "0.85rem",
+                marginBottom: "1.25rem",
+                fontSize: "0.825rem",
                 color: "var(--text-secondary)",
               }}
             >

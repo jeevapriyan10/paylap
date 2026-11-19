@@ -139,7 +139,7 @@ export const ContractDetail: React.FC<ContractDetailProps> = ({ contractId, onBa
             </button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => handleInspectReceipt()}>
-            📜 Inspect Digital Receipt
+            Inspect Digital Receipt
           </button>
         </div>
       </div>

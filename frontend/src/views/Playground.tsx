@@ -172,7 +172,7 @@ export const Playground: React.FC = () => {
       )}
 
       {/* Scenario Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         {SCENARIOS.map((scen) => {
           const runRes = results.find((r) => r.scenario === scen.key);
           return (

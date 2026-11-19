@@ -12,6 +12,7 @@ export const App: React.FC = () => {
   const [currentPath, setCurrentPath] = useState<string>(window.location.pathname);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -65,6 +66,7 @@ export const App: React.FC = () => {
   const navigate = (path: string) => {
     window.history.pushState({}, "", path);
     setCurrentPath(path);
+    setMobileMenuOpen(false);
   };
 
   // Route parsing
@@ -112,10 +114,25 @@ export const App: React.FC = () => {
             navigate("/");
           }}
         >
-          <span style={{ color: "var(--accent-cyan)", fontSize: "1.3rem" }}>⚡</span> PayLap
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--accent-cyan)"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ display: "inline-block", verticalAlign: "middle" }}
+          >
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+          </svg>
+          <span style={{ fontWeight: 700, letterSpacing: "-0.02em" }}>PayLap</span>
           <span className="brand-badge">v0.3.0</span>
         </a>
 
+        {/* Desktop nav links */}
         <ul className="nav-links">
           <li>
             <button
@@ -143,12 +160,16 @@ export const App: React.FC = () => {
           </li>
         </ul>
 
+        {/* Desktop meta + Mobile Hamburger button */}
         <div className="nav-meta">
-          <span className="badge badge-simulated">Simulated Mode Active</span>
+          <span className="badge badge-simulated" style={{ display: "inline-flex" }}>
+            <span className="badge-dot badge-dot-warning" />
+            Simulated
+          </span>
 
           {currentUser ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <span className="mono" style={{ fontSize: "0.8rem", color: "var(--accent-cyan)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <span className="mono" style={{ fontSize: "0.78rem", color: "var(--accent-cyan)", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {currentUser.email}
               </span>
               <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
@@ -157,11 +178,44 @@ export const App: React.FC = () => {
             </div>
           ) : (
             <button className="btn btn-primary btn-sm" onClick={() => setShowAuthModal(true)}>
-              ⚡ Sign In
+              Sign In
             </button>
           )}
+
+          {/* Mobile hamburger menu toggle */}
+          <button
+            className="mobile-menu-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? "✕" : "☰"}
+          </button>
         </div>
       </nav>
+
+      {/* Mobile Drawer */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav-drawer">
+          <button
+            className={`nav-link ${currentPath === "/" || currentPath.startsWith("/contracts") ? "active" : ""}`}
+            onClick={() => navigate("/")}
+          >
+            Contracts
+          </button>
+          <button
+            className={`nav-link ${currentPath === "/playground" ? "active" : ""}`}
+            onClick={() => navigate("/playground")}
+          >
+            Red Team Arena
+          </button>
+          <button
+            className={`nav-link ${currentPath === "/settings" ? "active" : ""}`}
+            onClick={() => navigate("/settings")}
+          >
+            Settings
+          </button>
+        </div>
+      )}
 
       <main className="content-wrapper">{view}</main>
 
@@ -170,11 +224,9 @@ export const App: React.FC = () => {
         onClose={() => setShowAuthModal(false)}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
-          // Reload view
           navigate(currentPath);
         }}
       />
     </div>
   );
 };
-

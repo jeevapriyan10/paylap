@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.buyer_agent import BuyerAgent
 from app.agents.worker_agent import WorkerAgent
-from app.db import SessionLocal
+from app.db import SessionLocal, SessionMigrate
 from app.ledger import verify_chain
 
 SCENARIOS: Dict[str, Dict[str, Any]] = {
@@ -208,11 +208,9 @@ def run_arena(scenarios: Optional[List[str]] = None, client: Optional[TestClient
         if not res.get("passed"):
             all_passed = False
 
-    # Verify ledger integrity per created contract
-    db = SessionLocal()
     ledger_valid = True
     err = None
-    try:
+    with SessionMigrate() as db:
         for r in results:
             cid = r.get("contract_id")
             if cid:
@@ -221,8 +219,6 @@ def run_arena(scenarios: Optional[List[str]] = None, client: Optional[TestClient
                     ledger_valid = False
                     err = e_msg
                     break
-    finally:
-        db.close()
 
     run_record = {
         "run_id": run_id,

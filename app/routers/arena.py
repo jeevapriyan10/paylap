@@ -45,8 +45,19 @@ def start_arena_run(
     scenarios = [target] if (target and target != "all") else list(SCENARIOS.keys())
 
     auth_header = request.headers.get("authorization")
-    client_headers = {"Authorization": auth_header} if auth_header else {}
-    runner_client = TestClient(request.app, headers=client_headers)
+    session_cookie = request.cookies.get("paylap_session")
+    csrf_header = request.headers.get("x-csrf-token")
+
+    client_headers: Dict[str, str] = {}
+    client_cookies: Dict[str, str] = {}
+    if auth_header:
+        client_headers["Authorization"] = auth_header
+    if csrf_header:
+        client_headers["X-CSRF-Token"] = csrf_header
+    if session_cookie:
+        client_cookies["paylap_session"] = session_cookie
+
+    runner_client = TestClient(request.app, headers=client_headers, cookies=client_cookies)
 
     if sync:
         return run_arena(scenarios=scenarios, client=runner_client)

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db import get_db
+from app.db import get_db, set_tenant_org
 from app.ids import generate_id
 from app.models import ApiKey, LoginAttempt, Membership, Organization, User
 from app.models import Session as UserSession
@@ -36,14 +36,14 @@ router = APIRouter(prefix="/v1/auth", tags=["Authentication & Access"])
 
 
 class SignupRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=3)
     password: str = Field(..., min_length=12)
     org_name: Optional[str] = "Personal Workspace"
     signup_code: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str = Field(..., min_length=3)
     password: str
 
 
@@ -182,7 +182,7 @@ def get_current_principal(
             api_key.last_used_at = now
             db.commit()
 
-            return Principal(
+            principal = Principal(
                 user_id=api_key.created_by,
                 org_id=api_key.org_id,
                 api_key_id=api_key.id,
@@ -190,6 +190,8 @@ def get_current_principal(
                 env_class=api_key.environment_class,
                 is_api_key=True,
             )
+            set_tenant_org(db, principal.org_id)
+            return principal
         else:
             # Bearer Session Token
             token_h = hash_token(token)
@@ -208,12 +210,15 @@ def get_current_principal(
             org_id = mem.org_id if mem else ""
             role = mem.role if mem else "viewer"
 
-            return Principal(
+            principal = Principal(
                 user_id=sess.user_id,
                 org_id=org_id,
                 role=role,
                 is_api_key=False,
             )
+            if org_id:
+                set_tenant_org(db, org_id)
+            return principal
 
     # 2. Cookie-based Session Authentication
     if paylap_session:
@@ -236,12 +241,15 @@ def get_current_principal(
         org_id = mem.org_id if mem else ""
         role = mem.role if mem else "viewer"
 
-        return Principal(
+        principal = Principal(
             user_id=sess.user_id,
             org_id=org_id,
             role=role,
             is_api_key=False,
         )
+        if org_id:
+            set_tenant_org(db, org_id)
+        return principal
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 

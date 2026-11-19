@@ -161,7 +161,7 @@ export const ContractsList: React.FC<ContractsListProps> = ({ onSelectContract, 
           </p>
           {error.includes("Authentication") && onOpenAuth && (
             <button className="btn btn-primary" onClick={onOpenAuth}>
-              ⚡ Sign In / Quick Dev Login
+              Sign In to View Contracts
             </button>
           )}
         </div>
