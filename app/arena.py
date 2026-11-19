@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.buyer_agent import BuyerAgent
 from app.agents.worker_agent import WorkerAgent
-from app.db import SessionLocal, SessionMigrate
+from app.db import SessionMigrate
 from app.ledger import verify_chain
 
 SCENARIOS: Dict[str, Dict[str, Any]] = {

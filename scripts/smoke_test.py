@@ -11,11 +11,9 @@ Exercises the full lifecycle against a running server:
 """
 
 import base64
-import hashlib
 import json
 import os
 import sys
-import time
 from typing import Any, Dict
 
 import httpx
@@ -125,7 +123,7 @@ def fib(n):
         log("Performing offline cryptographic verification of Ed25519 signature...")
         valid = verify_receipt(receipt)
         assert valid is True
-        log(f"✓ Offline Ed25519 signature and SHA-256 hash verified successfully!")
+        log("✓ Offline Ed25519 signature and SHA-256 hash verified successfully!")
         log(f"  Receipt ID:   {receipt.get('receipt_id')}")
         log(f"  Chain Head:   {receipt.get('chain_head_hash', '')[:24]}...")
 

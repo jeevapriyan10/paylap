@@ -124,28 +124,3 @@ def serve_spa(full_path: str):
     if os.path.exists(dist_index):
         return FileResponse(dist_index)
     return {"message": "PayLap Settlement API is running. Production frontend not built."}
-
-if os.path.exists(frontend_assets):
-    app.mount("/assets", StaticFiles(directory=frontend_assets), name="static_assets")
-
-
-@app.get("/{full_path:path}", include_in_schema=False)
-def serve_spa(full_path: str):
-    """
-    Serve compiled React SPA for client-side routes, falling back to index.html.
-    Preserves 404 for API, health, and documentation prefixes.
-    """
-    clean_path = full_path.lstrip("/")
-    if (
-        clean_path.startswith("v1")
-        or clean_path.startswith("docs")
-        or clean_path.startswith("openapi.json")
-        or clean_path in ("healthz", "readyz")
-    ):
-        raise HTTPException(status_code=404, detail="Endpoint not found")
-
-    dist_index = os.path.join(frontend_dist, "index.html")
-    if os.path.exists(dist_index):
-        return FileResponse(dist_index)
-    return {"message": "PayLap Settlement API is running. Production frontend not built."}
-

@@ -1,7 +1,6 @@
 """Unit and integration tests for PayLap Python SDK and MCP Server."""
 
 import base64
-import hashlib
 import json
 import os
 import sys
@@ -13,15 +12,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 # Add sdk/python to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "sdk", "python")))
 
-from paylap.client import AsyncPayLap, PayLap, canonicalize_json, verify_receipt_data
+from paylap.client import PayLap, canonicalize_json, verify_receipt_data
 from paylap.exceptions import (
     AuthenticationError,
     AuthorizationError,
     NotFoundError,
-    PayLapError,
     ReceiptVerificationError,
     SpendPolicyError,
-    ValidationError,
 )
 from paylap.mcp import MCPServer, get_tools_manifest
 

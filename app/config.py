@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Access, Auth & Signups
     PAYLAP_SIGNUP_MODE: Literal["closed", "open"] = "closed"
     PAYLAP_SIGNUP_CODE: str = ""
-    PAYLAP_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000"]
+    PAYLAP_CORS_ORIGINS: Any = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:3000"]
     PAYLAP_ENABLE_DOCS: bool = True
     PAYLAP_ALLOW_LIVE: bool = False
 

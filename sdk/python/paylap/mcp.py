@@ -32,7 +32,10 @@ def get_tools_manifest() -> List[Dict[str, Any]]:
                                 "title": {"type": "string"},
                                 "amount_usd": {"type": "string", "description": "Amount in USD (e.g. '25.00')"},
                                 "public_tests": {"type": "string", "description": "Public test assertions"},
-                                "hidden_tests": {"type": "string", "description": "Hidden test assertions for anti-cheat"},
+                                "hidden_tests": {
+                                    "type": "string",
+                                    "description": "Hidden test assertions for anti-cheat",
+                                },
                                 "verifier_type": {"type": "string", "default": "python_code"},
                             },
                             "required": ["title", "amount_usd", "public_tests"],

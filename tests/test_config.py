@@ -28,6 +28,18 @@ def test_cors_origins_wildcard_rejected():
     assert "cannot be '*'" in str(exc2.value)
 
 
+def test_cors_origins_from_environment(monkeypatch):
+    monkeypatch.setenv(
+        "PAYLAP_CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:5173",
+    )
+    s = Settings()
+    assert s.PAYLAP_CORS_ORIGINS == [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+
+
 def test_master_keys_parsing_and_active():
     key1_bytes = b"01234567890123456789012345678901"  # 32 bytes
     key2_bytes = b"abcdefghijklmnopqrstuvwxyz012345"  # 32 bytes

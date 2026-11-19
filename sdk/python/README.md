@@ -26,7 +26,7 @@ contract = client.create_contract(
             "public_tests": "def test_parse(): assert parse('123') == 123",
             "hidden_tests": "def test_hidden(): assert parse('-1') == -1",
         }
-    ]
+    ],
 )
 
 print(f"Created contract: {contract['id']}")

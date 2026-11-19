@@ -1,9 +1,5 @@
 """Test wrapper for scripts/smoke_test.py execution against in-memory FastAPI app."""
 
-import pytest
-from starlette.testclient import TestClient
-
-from app.main import app
 from scripts.smoke_test import verify_receipt
 
 
