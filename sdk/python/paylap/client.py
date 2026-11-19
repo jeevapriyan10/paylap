@@ -27,31 +27,24 @@ def canonicalize_json(data: Any) -> bytes:
 def verify_receipt_data(receipt: Dict[str, Any]) -> bool:
     """
     Offline cryptographic verification of a PayLap receipt (Receipt v2).
-    Verifies that receipt_hash matches SHA-256 of canonical data,
-    and ed25519_signature is valid against the org master public key.
+    Verifies that Ed25519 signature is valid against the signer public key
+    over RFC 8785 canonical JSON bytes of the receipt payload.
     """
     try:
-        public_key_b64 = receipt.get("public_key")
-        signature_b64 = receipt.get("ed25519_signature")
-        receipt_hash = receipt.get("receipt_hash")
-        content = receipt.get("content")
+        signature_b64 = receipt.get("signature") or receipt.get("ed25519_signature")
+        pubkey_b64 = receipt.get("signer_public_key") or receipt.get("public_key")
 
-        if not (public_key_b64 and signature_b64 and receipt_hash and content):
-            raise ReceiptVerificationError("Receipt missing required cryptographic fields")
+        if not signature_b64 or not pubkey_b64:
+            raise ReceiptVerificationError("Receipt missing signature or signer_public_key")
 
-        # 1. Verify content hash
-        canonical_content = canonicalize_json(content)
-        computed_hash = hashlib.sha256(canonical_content).hexdigest()
-        if computed_hash != receipt_hash:
-            raise ReceiptVerificationError(f"Content hash mismatch: expected {computed_hash}, got {receipt_hash}")
+        # Strip signature field before canonicalizing
+        payload_to_verify = {k: v for k, v in receipt.items() if k not in ("signature", "ed25519_signature")}
+        canonical_bytes = canonicalize_json(payload_to_verify)
 
-        # 2. Verify Ed25519 signature
-        pub_key_bytes = base64.b64decode(public_key_b64)
+        pub_bytes = base64.b64decode(pubkey_b64)
         sig_bytes = base64.b64decode(signature_b64)
-        public_key = Ed25519PublicKey.from_public_bytes(pub_key_bytes)
-
-        # Signature is computed over canonical bytes of the hash string
-        public_key.verify(sig_bytes, receipt_hash.encode("utf-8"))
+        pub_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
+        pub_key.verify(sig_bytes, canonical_bytes)
         return True
     except Exception as exc:
         if isinstance(exc, ReceiptVerificationError):
@@ -219,7 +212,7 @@ class PayLap(BaseClient):
     ) -> Dict[str, Any]:
         """Submit deliverable work for milestone verification."""
         payload: Dict[str, Any] = {
-            "submission_code": submission_code,
+            "code": submission_code,
             "worker_id": worker_id or "anonymous_worker",
             "explanation": explanation,
         }
@@ -363,7 +356,7 @@ class AsyncPayLap(BaseClient):
         explanation: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
-            "submission_code": submission_code,
+            "code": submission_code,
             "worker_id": worker_id or "anonymous_worker",
             "explanation": explanation,
         }

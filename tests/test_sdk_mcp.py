@@ -32,27 +32,22 @@ def generate_valid_test_receipt():
     pub = priv.public_key()
     pub_b64 = base64.b64encode(pub.public_bytes_raw()).decode("utf-8")
 
-    content = {
+    payload = {
+        "receipt_id": "rcpt_test1234567890",
+        "version": "2.0",
         "contract_id": "ctr_test1234567890",
         "milestone_id": "mst_test1234567890",
-        "event": "MILESTONE_SETTLED",
         "amount_cents": 2500,
         "currency": "USD",
         "status": "COMPLETED",
+        "signer_public_key": pub_b64,
     }
-    canonical_bytes = canonicalize_json(content)
-    r_hash = hashlib.sha256(canonical_bytes).hexdigest()
-
-    sig = priv.sign(r_hash.encode("utf-8"))
+    canonical_bytes = canonicalize_json(payload)
+    sig = priv.sign(canonical_bytes)
     sig_b64 = base64.b64encode(sig).decode("utf-8")
 
-    return {
-        "version": "receipt-v2",
-        "receipt_hash": r_hash,
-        "public_key": pub_b64,
-        "ed25519_signature": sig_b64,
-        "content": content,
-    }
+    payload["signature"] = sig_b64
+    return payload
 
 
 def test_offline_receipt_verification():
@@ -61,14 +56,13 @@ def test_offline_receipt_verification():
 
     # Tamper with content
     tampered = dict(receipt)
-    tampered["content"] = dict(receipt["content"])
-    tampered["content"]["amount_cents"] = 999999
-    with pytest.raises(ReceiptVerificationError, match="Content hash mismatch"):
+    tampered["amount_cents"] = 999999
+    with pytest.raises(ReceiptVerificationError):
         verify_receipt_data(tampered)
 
     # Tamper with signature
     tampered_sig = dict(receipt)
-    tampered_sig["ed25519_signature"] = base64.b64encode(b"invalid_signature_bytes_32_chars!").decode("utf-8")
+    tampered_sig["signature"] = base64.b64encode(b"invalid_signature_bytes_32_chars!32_chars!").decode("utf-8")
     with pytest.raises(ReceiptVerificationError):
         verify_receipt_data(tampered_sig)
 

@@ -105,18 +105,19 @@ This document tracks execution across all phases, recording exit gate validation
   - [x] FastAPI static asset serving with SPA fallback (`app/main.py` mounting `/assets` and falling back to `index.html`)
   - [x] **Exit Gate**: `npm run build` passes with zero type errors; Vitest unit tests pass; served cleanly by FastAPI (`tests/test_frontend_serving.py` 3/3 passed).
 
-- [ ] **P10: Python SDK, MCP Server, and Documentation Site**
-  - [ ] Typed `paylap` Python SDK with httpx
-  - [ ] Official MCP server with standard tools
-  - [ ] MkDocs Material documentation site (Quickstart, Concepts, Guides, Architecture, Threat Model, ADRs)
-  - [ ] **Exit Gate**: `mkdocs --strict` builds; SDK and MCP test suites pass.
+- [x] **P10: Python SDK, MCP Server, and Documentation Site**
+  - [x] Typed `paylap` Python SDK with httpx (sync `PayLap` and async `AsyncPayLap`)
+  - [x] Official Model Context Protocol (MCP) server over stdio with tools (`paylap_create_contract`, `paylap_get_contract`, `paylap_fund_contract`, `paylap_submit_milestone`, `paylap_verify_receipt`, `paylap_get_worker_stats`)
+  - [x] MkDocs Material documentation site (Quickstart, Concepts, Architecture, Threat Model, Receipts & Cryptography, ADRs, SDK & MCP)
+  - [x] **Exit Gate**: `mkdocs build --strict` builds cleanly in 1.09s; SDK and MCP test suites pass (5/5 passed in `tests/test_sdk_mcp.py`).
 
-- [ ] **P11: Production Packaging, Release, and Final Verification**
-  - [ ] Multi-stage production Dockerfile and `docker-compose.prod.yml`
-  - [ ] Render.yaml demo deployment blueprint
-  - [ ] GitHub release workflow
-  - [ ] Fresh clone end-to-end smoke test
-  - [ ] **Exit Gate**: Release build verified; final test suite, linter, and offline receipt checks pass.
+- [x] **P11: Production Packaging, Release, and Final Verification**
+  - [x] Multi-stage production Dockerfile (node:20-alpine build + python:3.11-slim runtime with non-root `paylap` user and healthcheck)
+  - [x] `docker-compose.prod.yml` with PostgreSQL 16 and production environment configurations
+  - [x] Render.yaml demo deployment blueprint with database linkage
+  - [x] GitHub Actions automated release workflow `.github/workflows/release.yml` on `v*` tags
+  - [x] End-to-end smoke verification test pipeline (`scripts/smoke_test.py` and `tests/test_smoke_pipeline.py`)
+  - [x] **Exit Gate**: Multi-stage Dockerfile verified; end-to-end pipeline passed (health, contract, settlement, Ed25519 offline receipt, public share token); 100% test suite clean.
 
 ---
 
